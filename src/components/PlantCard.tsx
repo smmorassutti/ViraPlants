@@ -1,37 +1,99 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { viraTheme } from '../theme/vira';
+import {View, Text, Image, StyleSheet, TouchableOpacity} from 'react-native';
+import {viraTheme} from '../theme/vira';
+import {CareCountdown} from './CareCountdown';
+import type {Plant} from '../types/plant';
 
 type PlantCardProps = {
-  title?: string;
-  subtitle?: string;
+  plant: Plant;
+  onPress: () => void;
 };
 
-export const PlantCard: React.FC<PlantCardProps> = ({ title = 'PlantCard', subtitle }) => {
+export const PlantCard: React.FC<PlantCardProps> = ({plant, onPress}) => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-    </View>
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={0.7}>
+      <View style={styles.photoContainer}>
+        {plant.photoUrl ? (
+          <Image source={{uri: plant.photoUrl}} style={styles.photo} />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Text style={styles.photoPlaceholderEmoji}>{'\u{1FAB4}'}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.info}>
+        <Text style={styles.nickname} numberOfLines={1}>
+          {plant.nickname || 'Unnamed plant'}
+        </Text>
+        <Text style={styles.species} numberOfLines={1}>
+          {plant.name || 'Unknown species'}
+        </Text>
+
+        <View style={styles.countdowns}>
+          <CareCountdown plant={plant} type="water" compact />
+          <CareCountdown plant={plant} type="fertilize" compact />
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: viraTheme.spacing.lg,
+    flexDirection: 'row',
+    backgroundColor: viraTheme.colors.card,
     borderRadius: viraTheme.radius.lg,
-    backgroundColor: viraTheme.colors.butterMoon,
+    padding: viraTheme.spacing.md,
+    marginHorizontal: viraTheme.spacing.lg,
+    marginBottom: viraTheme.spacing.md,
     borderWidth: 1,
-    borderColor: viraTheme.colors.hemlock,
+    borderColor: viraTheme.colors.borderLight,
   },
-  title: {
+  photoContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: viraTheme.radius.md,
+    overflow: 'hidden',
+  },
+  photo: {
+    width: '100%',
+    height: '100%',
+  },
+  photoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: viraTheme.colors.butterMoon,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: viraTheme.radius.md,
+    borderWidth: 1,
+    borderColor: viraTheme.colors.border,
+  },
+  photoPlaceholderEmoji: {
+    fontSize: 28,
+  },
+  info: {
+    flex: 1,
+    marginLeft: viraTheme.spacing.md,
+    justifyContent: 'center',
+  },
+  nickname: {
     ...viraTheme.typography.heading2,
-    color: viraTheme.colors.hemlock,
-  },
-  subtitle: {
-    marginTop: viraTheme.spacing.xs,
-    ...viraTheme.typography.body,
+    fontSize: 17,
     color: viraTheme.colors.lagoon,
   },
+  species: {
+    ...viraTheme.typography.caption,
+    color: viraTheme.colors.textMuted,
+    marginTop: 2,
+  },
+  countdowns: {
+    flexDirection: 'row',
+    gap: viraTheme.spacing.sm,
+    marginTop: viraTheme.spacing.sm,
+  },
 });
-
