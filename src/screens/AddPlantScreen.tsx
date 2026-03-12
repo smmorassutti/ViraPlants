@@ -15,8 +15,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { viraTheme } from '../theme/vira';
 import { usePlantStore } from '../store/usePlantStore';
-// TODO: Uncomment when react-native-image-picker is installed
-// import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { pickImage } from '../utils/pickImage';
 
 const { colors, spacing, radius, typography } = viraTheme;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -138,39 +137,23 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
   } | null>(null);
 
   // ─── Photo selection ───
-  const handlePickPhoto = useCallback(() => {
-    // TODO: Replace with actual image picker when react-native-image-picker is installed
-    // For now, use a placeholder image URI to test the flow
-    //
-    // Real implementation:
-    // launchImageLibrary(
-    //   { mediaType: 'photo', quality: 0.7, maxWidth: 1200, maxHeight: 1200 },
-    //   (response) => {
-    //     if (response.assets?.[0]?.uri) {
-    //       setPhotoUri(response.assets[0].uri);
-    //     }
-    //   },
-    // );
-
-    // Placeholder for development — simulates a selected photo
-    setPhotoUri('placeholder');
+  const handlePickPhoto = useCallback(async () => {
+    const uri = await pickImage('library');
+    if (uri) setPhotoUri(uri);
   }, []);
 
-  const handleTakePhoto = useCallback(() => {
-    // TODO: Replace with actual camera when react-native-image-picker is installed
-    //
-    // Real implementation:
-    // launchCamera(
-    //   { mediaType: 'photo', quality: 0.7, maxWidth: 1200, maxHeight: 1200 },
-    //   (response) => {
-    //     if (response.assets?.[0]?.uri) {
-    //       setPhotoUri(response.assets[0].uri);
-    //     }
-    //   },
-    // );
-
-    setPhotoUri('placeholder');
+  const handleTakePhoto = useCallback(async () => {
+    const uri = await pickImage('camera');
+    if (uri) setPhotoUri(uri);
   }, []);
+
+  const handleChoosePhoto = useCallback(() => {
+    Alert.alert('Add a photo', 'How would you like to add your plant photo?', [
+      {text: 'Take Photo', onPress: handleTakePhoto},
+      {text: 'Choose from Library', onPress: handlePickPhoto},
+      {text: 'Cancel', style: 'cancel'},
+    ]);
+  }, [handleTakePhoto, handlePickPhoto]);
 
   // ─── Analysis ───
   const handleAnalyze = useCallback(async () => {
@@ -208,7 +191,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
       location,
       orientation,
       potSize,
-      photoUrl: photoUri === 'placeholder' ? undefined : photoUri || undefined,
+      photoUrl: photoUri || undefined,
       health: analysisResult.health,
       careNotes: analysisResult.careNotes,
       waterFrequencyDays: analysisResult.waterFrequencyDays,
@@ -233,28 +216,21 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
         {!photoUri ? (
           <TouchableOpacity
             style={s.photoUpload}
-            onPress={handlePickPhoto}
+            onPress={handleChoosePhoto}
             activeOpacity={0.8}
           >
             <View style={s.photoUploadIcon}>
               <Text style={{ fontSize: 28 }}>📷</Text>
             </View>
-            <Text style={s.photoUploadLabel}>Tap to upload a photo</Text>
+            <Text style={s.photoUploadLabel}>Tap to add a photo</Text>
           </TouchableOpacity>
         ) : (
           <View style={s.photoPreviewContainer}>
-            {photoUri === 'placeholder' ? (
-              <View style={s.photoPlaceholder}>
-                <Text style={{ fontSize: 44 }}>🌱</Text>
-                <Text style={s.photoPlaceholderText}>Photo selected</Text>
-              </View>
-            ) : (
-              <Image
-                source={{ uri: photoUri }}
-                style={s.photoPreview}
-                resizeMode="cover"
-              />
-            )}
+            <Image
+              source={{ uri: photoUri }}
+              style={s.photoPreview}
+              resizeMode="cover"
+            />
             <TouchableOpacity
               style={s.photoRemove}
               onPress={() => setPhotoUri(null)}
@@ -263,17 +239,6 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={s.photoRemoveLabel}>✕</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Secondary option */}
-        {!photoUri && (
-          <TouchableOpacity
-            style={s.secondaryAction}
-            onPress={handleTakePhoto}
-            activeOpacity={0.7}
-          >
-            <Text style={s.secondaryActionLabel}>Or take a photo with your camera</Text>
-          </TouchableOpacity>
         )}
       </View>
 

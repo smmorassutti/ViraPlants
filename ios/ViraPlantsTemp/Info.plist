@@ -54,6 +54,10 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Vira needs camera access to photograph your plants for identification and care tracking.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Vira needs photo library access so you can select plant photos for identification and care tracking.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 </dict>
