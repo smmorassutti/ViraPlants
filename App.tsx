@@ -56,7 +56,15 @@ const App = () => {
             component={HomeScreen}
             options={{title: 'My Plants'}}
           />
-          <Stack.Screen name="PlantDetail" component={PlantDetailScreen} />
+          <Stack.Screen
+            name="PlantDetail"
+            component={PlantDetailScreen}
+            options={{
+              headerTransparent: true,
+              headerTitle: '',
+              headerTintColor: '#FFFFFF',
+            }}
+          />
           <Stack.Screen name="AddPlant" component={AddPlantScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>

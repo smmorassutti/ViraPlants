@@ -44,6 +44,7 @@ export interface Plant {
   photoUrl?: string;
   health?: string;
   careNotes?: string;
+  notes?: string;
   waterFrequencyDays?: number;
   fertilizeFrequencyDays?: number;
   connectionType?: ConnectionType;
