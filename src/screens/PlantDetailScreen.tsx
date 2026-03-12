@@ -17,11 +17,25 @@ import {usePlantStore} from '../store/usePlantStore';
 import {CareCountdown} from '../components/CareCountdown';
 import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
-import type {CareEvent} from '../types/plant';
+import type {CareEvent, Plant} from '../types/plant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlantDetail'>;
 
 const HERO_HEIGHT = 300;
+
+const getLastCareDate = (
+  plant: Plant,
+  type: 'water' | 'fertilize',
+): Date | undefined => {
+  const events = (plant.careEvents || []).filter(e => e.type === type);
+  if (events.length === 0) return undefined;
+  const sorted = events.sort(
+    (a, b) =>
+      new Date(b.occurredAt || b.createdAt || 0).getTime() -
+      new Date(a.occurredAt || a.createdAt || 0).getTime(),
+  );
+  return new Date(sorted[0].occurredAt || sorted[0].createdAt || 0);
+};
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
 const formatDate = (dateStr?: string): string => {
@@ -212,13 +226,13 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           <View style={styles.careCard}>
             <CareCountdown plant={plant} type="water" />
             <View style={styles.markDoneWrapper}>
-              <MarkDoneButton label="Done" onPress={handleMarkWatered} />
+              <MarkDoneButton type="water" onPress={handleMarkWatered} lastDone={getLastCareDate(plant, 'water')} />
             </View>
           </View>
           <View style={styles.careCard}>
             <CareCountdown plant={plant} type="fertilize" />
             <View style={styles.markDoneWrapper}>
-              <MarkDoneButton label="Done" onPress={handleMarkFertilized} />
+              <MarkDoneButton type="fertilize" onPress={handleMarkFertilized} lastDone={getLastCareDate(plant, 'fertilize')} />
             </View>
           </View>
         </View>
