@@ -95,12 +95,14 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Zustand store with all actions (add/update/remove plant, log care events, mark watered/fertilized)
 - Theme system with full brand palette
 - Navigation with typed params
+- HomeScreen — list + grid views with toggle, upcoming care tasks section, FAB to add plant, warm empty state
+- Components: PlantCard (list view), PlantGridItem (grid view), CareCountdown (real countdown logic with overdue/urgent states, compact mode)
+- PlantDetailScreen reads real plant data from store via route params (still needs full UI build-out)
 
 **Next up (in order):**
-1. HomeScreen — plant list + gallery views, upcoming care tasks, FAB to add plant
-2. PlantDetailScreen — hero photo, care notes, countdowns, mark as done buttons, Vira Pot placeholder
-3. Component library — PlantCard, PlantGridItem, CareCountdown, MarkDoneButton, ViraPotPlaceholder
-4. react-native-image-picker — replace placeholder photo simulation
+1. PlantDetailScreen — hero photo, care notes, countdowns, mark as done buttons, Vira Pot placeholder
+2. Remaining components — MarkDoneButton wiring, ViraPotPlaceholder
+3. react-native-image-picker — replace placeholder photo simulation
 5. Supabase project + schema + RLS
 6. Auth (email + Google + Apple)
 7. Photo upload to Supabase Storage
