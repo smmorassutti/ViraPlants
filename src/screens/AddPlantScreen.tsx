@@ -10,7 +10,6 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  Dimensions,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { viraTheme } from '../theme/vira';
@@ -18,7 +17,6 @@ import { usePlantStore } from '../store/usePlantStore';
 import { pickImage } from '../utils/pickImage';
 
 const { colors, spacing, radius, typography } = viraTheme;
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddPlant'>;
 
@@ -116,7 +114,8 @@ const mockAnalyzePlant = async (
 
 export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
   const defaultLocation = route.params?.defaultLocation || '';
-  const { addPlant, profile } = usePlantStore();
+  const addPlant = usePlantStore(s => s.addPlant);
+  const profile = usePlantStore(s => s.profile);
 
   // ─── State ───
   const [step, setStep] = useState(1);
@@ -280,6 +279,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
             onChangeText={setNickname}
             autoCapitalize="words"
             returnKeyType="next"
+            maxLength={50}
           />
         </View>
 
@@ -294,6 +294,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
             onChangeText={setLocation}
             autoCapitalize="words"
             returnKeyType="done"
+            maxLength={100}
           />
           {location === (defaultLocation || profile?.defaultLocation) && location !== '' && (
             <Text style={s.inputHint}>Pre-filled from your setup</Text>
@@ -340,7 +341,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
       >
         {isAnalyzing ? (
           <View style={s.loadingRow}>
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={colors.white} size="small" />
             <Text style={s.primaryButtonLabel}>Getting to know your plant...</Text>
           </View>
         ) : (
@@ -379,13 +380,13 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Schedule cards */}
         <View style={s.scheduleRow}>
-          <View style={[s.scheduleCard, { backgroundColor: '#EEF4F0' }]}>
+          <View style={[s.scheduleCard, { backgroundColor: colors.scheduleWater }]}>
             <Text style={s.scheduleLabel}>Water every</Text>
             <Text style={s.scheduleValue}>
               {analysisResult.waterFrequencyDays}d
             </Text>
           </View>
-          <View style={[s.scheduleCard, { backgroundColor: '#F8F5E8' }]}>
+          <View style={[s.scheduleCard, { backgroundColor: colors.scheduleFertilize }]}>
             <Text style={s.scheduleLabel}>Fertilize every</Text>
             <Text style={s.scheduleValue}>
               {analysisResult.fertilizeFrequencyDays}d
@@ -559,20 +560,6 @@ const s = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  photoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: `${colors.hemlock}15`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  photoPlaceholderText: {
-    ...typography.body,
-    color: colors.textMuted,
-    fontWeight: '600',
-    fontSize: 14,
-  },
   photoRemove: {
     position: 'absolute',
     top: 12,
@@ -580,26 +567,14 @@ const s = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(24, 30, 20, 0.6)',
+    backgroundColor: colors.overlayLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   photoRemoveLabel: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 16,
     fontWeight: '600',
-  },
-
-  // Secondary action
-  secondaryAction: {
-    marginTop: spacing.lg,
-    alignItems: 'center',
-  },
-  secondaryActionLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
   },
 
   // Inputs
@@ -756,7 +731,7 @@ const s = StyleSheet.create({
   },
   primaryButtonLabel: {
     ...typography.button,
-    color: '#FFFFFF',
+    color: colors.white,
   },
 });
 

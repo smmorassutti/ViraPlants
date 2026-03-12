@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Dimensions,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
@@ -18,26 +17,12 @@ import {CareCountdown} from '../components/CareCountdown';
 import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
 import {pickImage} from '../utils/pickImage';
-import type {CareEvent, Plant} from '../types/plant';
+import {getLastCareDateOrUndefined} from '../utils/careUtils';
+import type {CareEvent} from '../types/plant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlantDetail'>;
 
 const HERO_HEIGHT = 300;
-
-const getLastCareDate = (
-  plant: Plant,
-  type: 'water' | 'fertilize',
-): Date | undefined => {
-  const events = (plant.careEvents || []).filter(e => e.type === type);
-  if (events.length === 0) return undefined;
-  const sorted = events.sort(
-    (a, b) =>
-      new Date(b.occurredAt || b.createdAt || 0).getTime() -
-      new Date(a.occurredAt || a.createdAt || 0).getTime(),
-  );
-  return new Date(sorted[0].occurredAt || sorted[0].createdAt || 0);
-};
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return '';
@@ -119,8 +104,10 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const plant = usePlantStore(state =>
     state.plants.find(p => p.id === route.params.plantId),
   );
-  const {updatePlant, removePlant, markWatered, markFertilized} =
-    usePlantStore();
+  const updatePlant = usePlantStore(s => s.updatePlant);
+  const removePlant = usePlantStore(s => s.removePlant);
+  const markWatered = usePlantStore(s => s.markWatered);
+  const markFertilized = usePlantStore(s => s.markFertilized);
 
   const [notesText, setNotesText] = useState(plant?.notes || '');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -143,7 +130,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            removePlant(plant.id!);
+            removePlant(plant.id);
             navigation.goBack();
           },
         },
@@ -166,14 +153,14 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
         text: 'Take Photo',
         onPress: async () => {
           const uri = await pickImage('camera');
-          if (uri) updatePlant(plant.id!, {photoUrl: uri});
+          if (uri) updatePlant(plant.id, {photoUrl: uri});
         },
       },
       {
         text: 'Choose from Library',
         onPress: async () => {
           const uri = await pickImage('library');
-          if (uri) updatePlant(plant.id!, {photoUrl: uri});
+          if (uri) updatePlant(plant.id, {photoUrl: uri});
         },
       },
       {text: 'Cancel', style: 'cancel'},
@@ -196,7 +183,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
     );
   }
 
-  const recentEvents = [...(plant.careEvents || [])]
+  const recentEvents = [...plant.careEvents]
     .sort(
       (a, b) =>
         new Date(b.occurredAt || b.createdAt || 0).getTime() -
@@ -251,13 +238,13 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           <View style={styles.careCard}>
             <CareCountdown plant={plant} type="water" />
             <View style={styles.markDoneWrapper}>
-              <MarkDoneButton type="water" onPress={handleMarkWatered} lastDone={getLastCareDate(plant, 'water')} />
+              <MarkDoneButton type="water" onPress={handleMarkWatered} lastDone={getLastCareDateOrUndefined(plant, 'water')} />
             </View>
           </View>
           <View style={styles.careCard}>
             <CareCountdown plant={plant} type="fertilize" />
             <View style={styles.markDoneWrapper}>
-              <MarkDoneButton type="fertilize" onPress={handleMarkFertilized} lastDone={getLastCareDate(plant, 'fertilize')} />
+              <MarkDoneButton type="fertilize" onPress={handleMarkFertilized} lastDone={getLastCareDateOrUndefined(plant, 'fertilize')} />
             </View>
           </View>
         </View>
@@ -295,6 +282,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
               placeholderTextColor={viraTheme.colors.textMuted}
               multiline
               autoFocus
+              maxLength={500}
             />
             <View style={styles.notesActions}>
               <TouchableOpacity
@@ -410,7 +398,7 @@ const styles = StyleSheet.create({
 
   // ── Hero ──
   heroContainer: {
-    width: SCREEN_WIDTH,
+    width: '100%',
     height: HERO_HEIGHT,
     position: 'relative',
   },
@@ -436,7 +424,7 @@ const styles = StyleSheet.create({
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(24,30,20,0.35)',
+    backgroundColor: viraTheme.colors.overlayDark,
   },
   heroTextContainer: {
     position: 'absolute',
@@ -446,12 +434,12 @@ const styles = StyleSheet.create({
   },
   heroNickname: {
     ...viraTheme.typography.heading1,
-    color: '#FFFFFF',
+    color: viraTheme.colors.white,
     textTransform: 'uppercase',
   },
   heroSpecies: {
     ...viraTheme.typography.body,
-    color: 'rgba(255,255,255,0.85)',
+    color: viraTheme.colors.whiteTranslucent,
     marginTop: viraTheme.spacing.xs,
   },
 

@@ -1,44 +1,16 @@
 import React from 'react';
 import {View, Text, StyleSheet} from 'react-native';
 import {viraTheme} from '../theme/vira';
-import type {Plant, CareEvent} from '../types/plant';
+import {getDaysUntilCare} from '../utils/careUtils';
+import type {Plant} from '../types/plant';
+
+// Re-export for existing consumers
+export {getDaysUntilCare} from '../utils/careUtils';
 
 type CareCountdownProps = {
   plant: Plant;
   type: 'water' | 'fertilize';
   compact?: boolean;
-};
-
-const getLastCareDate = (
-  plant: Plant,
-  type: 'water' | 'fertilize',
-): Date => {
-  const events = (plant.careEvents || []).filter(e => e.type === type);
-  if (events.length > 0) {
-    const sorted = events.sort(
-      (a, b) =>
-        new Date(b.occurredAt || b.createdAt || 0).getTime() -
-        new Date(a.occurredAt || a.createdAt || 0).getTime(),
-    );
-    return new Date(sorted[0].occurredAt || sorted[0].createdAt || 0);
-  }
-  return new Date(plant.createdAt || Date.now());
-};
-
-export const getDaysUntilCare = (
-  plant: Plant,
-  type: 'water' | 'fertilize',
-): number => {
-  const frequency =
-    type === 'water'
-      ? plant.waterFrequencyDays || 7
-      : plant.fertilizeFrequencyDays || 30;
-  const lastCare = getLastCareDate(plant, type);
-  const nextDue = new Date(lastCare);
-  nextDue.setDate(nextDue.getDate() + frequency);
-  const now = new Date();
-  const diffMs = nextDue.getTime() - now.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 };
 
 export const CareCountdown: React.FC<CareCountdownProps> = ({
@@ -135,11 +107,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   overdueBackground: {
-    backgroundColor: '#FFF5F4',
+    backgroundColor: viraTheme.colors.overdueBackground,
     borderColor: viraTheme.colors.error,
   },
   urgentBackground: {
-    backgroundColor: '#FFFBF0',
+    backgroundColor: viraTheme.colors.urgentBackground,
     borderColor: viraTheme.colors.warning,
   },
   overdueText: {

@@ -1,4 +1,4 @@
-import React, {useState, useRef, useCallback} from 'react';
+import React, {useState, useRef, useCallback, useEffect} from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -14,9 +14,6 @@ type MarkDoneButtonProps = {
   lastDone?: Date;
 };
 
-const WATER_COLOR = '#4A90D9';
-const FERTILIZE_COLOR = viraTheme.colors.success;
-
 const getDaysAgo = (date: Date): number => {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -30,9 +27,16 @@ export const MarkDoneButton: React.FC<MarkDoneButtonProps> = ({
 }) => {
   const [isDone, setIsDone] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const isWater = type === 'water';
-  const bgColor = isWater ? WATER_COLOR : FERTILIZE_COLOR;
+  const bgColor = isWater ? viraTheme.colors.waterBlue : viraTheme.colors.success;
   const icon = isWater ? '\u{1F4A7}' : '\u{1F331}';
   const label = isWater ? 'Water Now' : 'Fertilize Now';
 
@@ -54,7 +58,7 @@ export const MarkDoneButton: React.FC<MarkDoneButtonProps> = ({
       }),
     ]).start();
 
-    setTimeout(() => setIsDone(false), 1000);
+    timerRef.current = setTimeout(() => setIsDone(false), 1000);
   }, [isDone, onPress, scaleAnim]);
 
   const daysAgo =
@@ -102,7 +106,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...viraTheme.typography.button,
-    color: '#FFFFFF',
+    color: viraTheme.colors.white,
   },
   lastDone: {
     ...viraTheme.typography.caption,
