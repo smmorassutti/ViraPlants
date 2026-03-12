@@ -51,7 +51,11 @@ const App = () => {
             component={OnboardingScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{title: 'My Plants'}}
+          />
           <Stack.Screen name="PlantDetail" component={PlantDetailScreen} />
           <Stack.Screen name="AddPlant" component={AddPlantScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
