@@ -34,7 +34,8 @@ src/
 ├── theme/
 │   └── vira.ts            # Brand colors, typography, spacing
 ├── utils/
-│   └── pickImage.ts       # Camera/library image picker wrapper
+│   ├── pickImage.ts       # Camera/library image picker wrapper
+│   └── careUtils.ts       # getDaysUntilCare, getLastCareDate helpers
 ├── types/
 │   ├── navigation.ts      # ALL navigation types live here
 │   └── plant.ts           # Plant, CareEvent, Reminder, ConnectionType
@@ -62,7 +63,7 @@ src/
 
 **Imports:** `RootStackParamList` is always imported from `'../types/navigation'`.
 
-**Store pattern:** `import usePlantStore` → destructure only needed values/actions. Use `getState()` for non-reactive reads (e.g., initial route check in App.tsx).
+**Store pattern:** Always use targeted selectors: `usePlantStore(s => s.actionName)`. Never destructure the whole store (`const {...} = usePlantStore()`), as it subscribes to all state changes. Use `getState()` for non-reactive reads (e.g., initial route check in App.tsx).
 
 **Theme usage:** All styles reference `viraTheme.colors.hemlock`, `viraTheme.spacing.md`, etc. Never use raw hex values.
 
@@ -103,6 +104,7 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Components: PlantCard (list view), PlantGridItem (grid view), CareCountdown (countdown logic with overdue/urgent states, compact mode), MarkDoneButton (success animation, water-blue/green variants, lastDone display), ViraPotPlaceholder (coming soon card with dashed border)
 - react-native-image-picker — `src/utils/pickImage.ts` wrapping camera/library with Alert chooser, integrated in AddPlantScreen + PlantDetailScreen hero
 - Plant type includes `notes?: string` for user-editable notes (separate from AI-generated `careNotes`)
+- Review fixes complete: dead `selectedPlant` removed from store, 12 theme color tokens added (no more hardcoded colors), Zustand selectors targeted across all screens, `Plant` type tightened (core fields required) with `PlantInput` for `addPlant`, care date logic extracted to `src/utils/careUtils.ts`, `maxLength` on all TextInputs, MarkDoneButton setTimeout cleanup
 
 **Next up (in order):**
 1. Supabase project + schema + RLS
@@ -117,11 +119,14 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 
 ## Implementation Notes
 
-- **CareCountdown exports `getDaysUntilCare()`** — reusable helper used by HomeScreen (upcoming tasks), PlantCard, PlantGridItem, and PlantDetailScreen. Calculate from last care event + frequency, falls back to `createdAt` if no events.
-- **MarkDoneButton uses Animated API** — 1s success state with scale pulse, auto-resets. Disabled during animation to prevent double-taps.
+- **Care utils in `src/utils/careUtils.ts`** — `getDaysUntilCare()`, `getLastCareDate()`, `getLastCareDateOrUndefined()`. Used by CareCountdown (re-exports for backward compat), HomeScreen, PlantGridItem, PlantDetailScreen.
+- **`Plant` vs `PlantInput`** — `Plant` has required `id`, `connectionType`, `createdAt`, `updatedAt`, `careEvents`, `reminders`. `PlantInput` (used by `addPlant`) omits auto-generated fields. No more `!` non-null assertions needed for `plant.id`.
+- **Theme tokens** — `vira.ts` has utility colors (`white`, `black`), overlays (`overlayDark`, `overlayLight`, `overlayBadge`, `whiteTranslucent`), status backgrounds (`overdueBackground`, `urgentBackground`, `overdueBadge`, `urgentBadge`), and care type colors (`waterBlue`, `scheduleWater`, `scheduleFertilize`).
+- **MarkDoneButton uses Animated API** — 1s success state with scale pulse, auto-resets. Timer cleaned up via `useRef` + `useEffect`. Disabled during animation to prevent double-taps.
 - **pickImage returns `string | null`** — callers just check for null (cancelled/error). No compression yet — that happens at upload time (Supabase Storage step).
 - **PlantDetailScreen hero is a TouchableOpacity** — uses same Alert chooser pattern as AddPlantScreen for consistency. Updates plant via `updatePlant({ photoUrl })`.
 - **FlatList `key` prop** — HomeScreen sets `key={viewMode}` to force remount when toggling list/grid (required when changing `numColumns`).
+- **TextInput limits** — nickname: 50, location: 100, notes: 500.
 
 ## AI Integration Pattern
 
@@ -132,6 +137,11 @@ AddPlantScreen has a `mockAnalyzePlant()` function returning hardcoded results a
 ```
 
 When the Edge Function is ready, swap `mockAnalyzePlant()` for a `fetch()` call — drop-in replacement, no UI changes needed.
+
+## Pre-Launch Checklist
+
+1. **Android release build is signed with debug keystore** — must replace with a real signing key before any release build.
+2. **`NSLocationWhenInUseUsageDescription` is empty in Info.plist** — Apple will reject the app. Either add a real usage string or remove the key if location isn't needed.
 
 ## Hardware Context (for Phase 2 awareness)
 
