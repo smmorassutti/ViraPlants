@@ -17,6 +17,7 @@ import {usePlantStore} from '../store/usePlantStore';
 import {CareCountdown} from '../components/CareCountdown';
 import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
+import {pickImage} from '../utils/pickImage';
 import type {CareEvent, Plant} from '../types/plant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlantDetail'>;
@@ -158,6 +159,27 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
     if (plant?.id) markFertilized(plant.id);
   }, [plant?.id, markFertilized]);
 
+  const handleUpdatePhoto = useCallback(() => {
+    if (!plant?.id) return;
+    Alert.alert('Update photo', 'How would you like to update your plant photo?', [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const uri = await pickImage('camera');
+          if (uri) updatePlant(plant.id!, {photoUrl: uri});
+        },
+      },
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          const uri = await pickImage('library');
+          if (uri) updatePlant(plant.id!, {photoUrl: uri});
+        },
+      },
+      {text: 'Cancel', style: 'cancel'},
+    ]);
+  }, [plant?.id, updatePlant]);
+
   if (!plant) {
     return (
       <View style={styles.notFoundContainer}>
@@ -188,13 +210,16 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
       contentContainerStyle={styles.content}
       bounces={false}>
       {/* ── Hero Photo ── */}
-      <View style={styles.heroContainer}>
+      <TouchableOpacity
+        style={styles.heroContainer}
+        onPress={handleUpdatePhoto}
+        activeOpacity={0.85}>
         {plant.photoUrl ? (
           <Image source={{uri: plant.photoUrl}} style={styles.heroImage} />
         ) : (
           <View style={styles.heroPlaceholder}>
             <Text style={styles.heroPlaceholderEmoji}>{'\u{1FAB4}'}</Text>
-            <Text style={styles.heroPlaceholderText}>No photo yet</Text>
+            <Text style={styles.heroPlaceholderText}>Tap to add a photo</Text>
           </View>
         )}
         <View style={styles.heroOverlay} />
@@ -204,7 +229,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </Text>
           <Text style={styles.heroSpecies}>{plant.name || 'Unknown species'}</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* ── Quick Stats ── */}
       <View style={styles.statsRow}>
