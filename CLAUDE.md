@@ -8,6 +8,7 @@ Self-watering plant system companion app. Phase 1 = free plant companion (distri
 - **TypeScript** — strict mode
 - **Zustand** — state management (lightweight, excellent TS support)
 - **Supabase** — backend (Postgres, Auth, Storage, Edge Functions)
+- **react-native-image-picker** — camera + photo library access (1200x1200, quality 0.8)
 - **react-native-ble-plx** — installed, not configured yet (Phase 2)
 - **Montserrat** — brand typeface (ExtraBold for H1, Bold for H2/buttons, Regular for body, SemiBold for labels)
 
@@ -32,6 +33,8 @@ src/
 │   └── usePlantStore.ts   # Single Zustand store, all app state
 ├── theme/
 │   └── vira.ts            # Brand colors, typography, spacing
+├── utils/
+│   └── pickImage.ts       # Camera/library image picker wrapper
 ├── types/
 │   ├── navigation.ts      # ALL navigation types live here
 │   └── plant.ts           # Plant, CareEvent, Reminder, ConnectionType
@@ -85,33 +88,40 @@ Write like a calm, capable friend. Use the plant's nickname. Be warm, grounded, 
 
 ## Data Model (src/types/plant.ts)
 
-Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
+Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `notes` (user-editable), `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
 
 ## Current State (March 2026)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
-- Add Plant flow (3 steps) — Photo, Details, Results (with mock AI)
+- Add Plant flow (3 steps) — Photo (real image picker), Details, Results (with mock AI)
 - Zustand store with all actions (add/update/remove plant, log care events, mark watered/fertilized)
 - Theme system with full brand palette
 - Navigation with typed params
 - HomeScreen — list + grid views with toggle, upcoming care tasks section, FAB to add plant, warm empty state
-- Components: PlantCard (list view), PlantGridItem (grid view), CareCountdown (real countdown logic with overdue/urgent states, compact mode)
-- PlantDetailScreen reads real plant data from store via route params (still needs full UI build-out)
+- PlantDetailScreen — hero photo (tap to update), gradient overlay, quick stats, care countdowns + mark done, editable notes, care history log, Vira Pot placeholder, remove plant with confirmation
+- Components: PlantCard (list view), PlantGridItem (grid view), CareCountdown (countdown logic with overdue/urgent states, compact mode), MarkDoneButton (success animation, water-blue/green variants, lastDone display), ViraPotPlaceholder (coming soon card with dashed border)
+- react-native-image-picker — `src/utils/pickImage.ts` wrapping camera/library with Alert chooser, integrated in AddPlantScreen + PlantDetailScreen hero
+- Plant type includes `notes?: string` for user-editable notes (separate from AI-generated `careNotes`)
 
 **Next up (in order):**
-1. PlantDetailScreen — hero photo, care notes, countdowns, mark as done buttons, Vira Pot placeholder
-2. Remaining components — MarkDoneButton wiring, ViraPotPlaceholder
-3. react-native-image-picker — replace placeholder photo simulation
-5. Supabase project + schema + RLS
-6. Auth (email + Google + Apple)
-7. Photo upload to Supabase Storage
-8. Edge Function for Claude AI plant analysis (with species cache)
-9. Replace mockAnalyzePlant() with real fetch call
-10. Reminders via Notifee
-11. AsyncStorage persistence for Zustand
-12. Settings screen
-13. BLE service scaffold (Phase 2 prep)
+1. Supabase project + schema + RLS
+2. Auth (email + Google + Apple)
+3. Photo upload to Supabase Storage
+4. Edge Function for Claude AI plant analysis (with species cache)
+5. Replace mockAnalyzePlant() with real fetch call
+6. Reminders via Notifee
+7. AsyncStorage persistence for Zustand
+8. Settings screen
+9. BLE service scaffold (Phase 2 prep)
+
+## Implementation Notes
+
+- **CareCountdown exports `getDaysUntilCare()`** — reusable helper used by HomeScreen (upcoming tasks), PlantCard, PlantGridItem, and PlantDetailScreen. Calculate from last care event + frequency, falls back to `createdAt` if no events.
+- **MarkDoneButton uses Animated API** — 1s success state with scale pulse, auto-resets. Disabled during animation to prevent double-taps.
+- **pickImage returns `string | null`** — callers just check for null (cancelled/error). No compression yet — that happens at upload time (Supabase Storage step).
+- **PlantDetailScreen hero is a TouchableOpacity** — uses same Alert chooser pattern as AddPlantScreen for consistency. Updates plant via `updatePlant({ photoUrl })`.
+- **FlatList `key` prop** — HomeScreen sets `key={viewMode}` to force remount when toggling list/grid (required when changing `numColumns`).
 
 ## AI Integration Pattern
 
