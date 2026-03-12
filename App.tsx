@@ -62,7 +62,7 @@ const App = () => {
             options={{
               headerTransparent: true,
               headerTitle: '',
-              headerTintColor: '#FFFFFF',
+              headerTintColor: viraTheme.colors.white,
             }}
           />
           <Stack.Screen name="AddPlant" component={AddPlantScreen} />

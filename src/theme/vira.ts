@@ -20,6 +20,27 @@ export const colors = {
   success: '#4A7A5A',
   warning: '#B87A3A',
   error: '#C04030',
+
+  // Utility
+  white: '#FFFFFF',
+  black: '#000000',
+
+  // Overlays
+  overlayDark: 'rgba(24,30,20,0.35)',
+  overlayLight: 'rgba(24,30,20,0.6)',
+  overlayBadge: 'rgba(255,255,255,0.92)',
+  whiteTranslucent: 'rgba(255,255,255,0.85)',
+
+  // Status backgrounds
+  overdueBackground: '#FFF5F4',
+  urgentBackground: '#FFFBF0',
+  overdueBadge: 'rgba(192,64,48,0.15)',
+  urgentBadge: 'rgba(184,122,58,0.15)',
+
+  // Care type colors
+  waterBlue: '#4A90D9',
+  scheduleWater: '#EEF4F0',
+  scheduleFertilize: '#F8F5E8',
 };
 
 export const spacing = {

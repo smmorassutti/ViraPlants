@@ -34,7 +34,7 @@ export interface Profile {
 }
 
 export interface Plant {
-  id?: string;
+  id: string;
   userId?: string;
   name?: string;
   nickname?: string;
@@ -47,11 +47,16 @@ export interface Plant {
   notes?: string;
   waterFrequencyDays?: number;
   fertilizeFrequencyDays?: number;
-  connectionType?: ConnectionType;
+  connectionType: ConnectionType;
   viraPotId?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  reminders?: Reminder[];
-  careEvents?: CareEvent[];
+  createdAt: string;
+  updatedAt: string;
+  reminders: Reminder[];
+  careEvents: CareEvent[];
 }
+
+/** Input type for addPlant — core fields are auto-populated by the store */
+export type PlantInput = Omit<Partial<Plant>, 'id' | 'createdAt' | 'updatedAt' | 'careEvents' | 'reminders'> & {
+  connectionType?: ConnectionType;
+};
 

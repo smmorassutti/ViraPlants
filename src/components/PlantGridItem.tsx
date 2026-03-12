@@ -1,7 +1,7 @@
 import React from 'react';
 import {View, Text, Image, StyleSheet, TouchableOpacity} from 'react-native';
 import {viraTheme} from '../theme/vira';
-import {getDaysUntilCare} from './CareCountdown';
+import {getDaysUntilCare} from '../utils/careUtils';
 import type {Plant} from '../types/plant';
 
 type PlantGridItemProps = {
@@ -91,16 +91,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: viraTheme.spacing.sm,
     right: viraTheme.spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: viraTheme.colors.overlayBadge,
     paddingHorizontal: viraTheme.spacing.sm,
     paddingVertical: viraTheme.spacing.xs,
     borderRadius: viraTheme.radius.pill,
   },
   overdueBadge: {
-    backgroundColor: 'rgba(192,64,48,0.15)',
+    backgroundColor: viraTheme.colors.overdueBadge,
   },
   urgentBadge: {
-    backgroundColor: 'rgba(184,122,58,0.15)',
+    backgroundColor: viraTheme.colors.urgentBadge,
   },
   waterBadgeText: {
     ...viraTheme.typography.caption,

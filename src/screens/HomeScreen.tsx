@@ -170,7 +170,7 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
               renderItem={({item}) => (
                 <CareTaskCard
                   task={item}
-                  onPress={() => navigateToPlant(item.plant.id!)}
+                  onPress={() => navigateToPlant(item.plant.id)}
                 />
               )}
             />
@@ -195,7 +195,7 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
         data={plants}
         key={viewMode}
         numColumns={viewMode === 'grid' ? 2 : 1}
-        keyExtractor={item => item.id!}
+        keyExtractor={item => item.id}
         extraData={viewMode}
         contentContainerStyle={[
           styles.listContent,
@@ -208,12 +208,12 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
           viewMode === 'list' ? (
             <PlantCard
               plant={item}
-              onPress={() => navigateToPlant(item.id!)}
+              onPress={() => navigateToPlant(item.id)}
             />
           ) : (
             <PlantGridItem
               plant={item}
-              onPress={() => navigateToPlant(item.id!)}
+              onPress={() => navigateToPlant(item.id)}
             />
           )
         }
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   taskCardOverdue: {
     borderColor: viraTheme.colors.error,
-    backgroundColor: '#FFF5F4',
+    backgroundColor: viraTheme.colors.overdueBackground,
   },
   taskEmoji: {
     fontSize: 24,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...viraTheme.typography.button,
-    color: '#FFFFFF',
+    color: viraTheme.colors.white,
   },
 
   // ── FAB ──
@@ -383,14 +383,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
-    shadowColor: '#000',
+    shadowColor: viraTheme.colors.black,
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.2,
     shadowRadius: 5,
   },
   fabIcon: {
     fontSize: 28,
-    color: '#FFFFFF',
+    color: viraTheme.colors.white,
     lineHeight: 30,
     fontWeight: '300',
   },

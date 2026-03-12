@@ -1,9 +1,8 @@
 import { create } from 'zustand';
-import type { Plant, CareEvent, Profile } from '../types/plant';
+import type { Plant, PlantInput, CareEvent, Profile } from '../types/plant';
 
 type PlantStoreState = {
   plants: Plant[];
-  selectedPlant: Plant | null;
   profile: Profile | null;
   hasOnboarded: boolean;
 };
@@ -15,10 +14,9 @@ type PlantStoreActions = {
 
   // Plants
   setPlants: (plants: Plant[]) => void;
-  addPlant: (plant: Plant) => void;
+  addPlant: (plant: PlantInput) => void;
   updatePlant: (id: string, updates: Partial<Plant>) => void;
   removePlant: (id: string) => void;
-  setSelectedPlant: (plant: Plant | null) => void;
 
   // Care events
   logCareEvent: (plantId: string, event: CareEvent) => void;
@@ -32,7 +30,6 @@ const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)
 
 export const usePlantStore = create<PlantStore>((set, get) => ({
   plants: [],
-  selectedPlant: null,
   profile: null,
   hasOnboarded: false,
 
@@ -43,13 +40,14 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
   // ── Plants ──
   setPlants: (plants) => set({ plants }),
 
-  addPlant: (plant) => {
+  addPlant: (input) => {
+    const now = new Date().toISOString();
     const newPlant: Plant = {
-      ...plant,
-      id: plant.id || generateId(),
-      connectionType: plant.connectionType || 'manual',
-      createdAt: plant.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      ...input,
+      id: generateId(),
+      connectionType: input.connectionType || 'manual',
+      createdAt: now,
+      updatedAt: now,
       careEvents: [],
       reminders: [],
     };
@@ -61,22 +59,14 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
       plants: state.plants.map((p) =>
         p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
       ),
-      // Also update selectedPlant if it's the one being modified
-      selectedPlant:
-        state.selectedPlant?.id === id
-          ? { ...state.selectedPlant, ...updates, updatedAt: new Date().toISOString() }
-          : state.selectedPlant,
     }));
   },
 
   removePlant: (id) => {
     set((state) => ({
       plants: state.plants.filter((p) => p.id !== id),
-      selectedPlant: state.selectedPlant?.id === id ? null : state.selectedPlant,
     }));
   },
-
-  setSelectedPlant: (plant) => set({ selectedPlant: plant }),
 
   // ── Care Events ──
   logCareEvent: (plantId, event) => {
@@ -91,7 +81,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
     set((state) => ({
       plants: state.plants.map((p) =>
         p.id === plantId
-          ? { ...p, careEvents: [...(p.careEvents || []), careEvent] }
+          ? { ...p, careEvents: [...p.careEvents, careEvent] }
           : p
       ),
     }));
