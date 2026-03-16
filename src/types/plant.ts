@@ -3,32 +3,30 @@ export type ConnectionType = 'manual' | 'vira_pot';
 export interface Reminder {
   id?: string;
   plantId?: string;
-  type?: 'water' | 'fertilize' | 'custom';
-  scheduledAt?: string;
-  isActive?: boolean;
-  timezone?: string;
-  repeatIntervalDays?: number;
+  userId?: string;
+  type?: 'water' | 'fertilize' | 'repot' | 'prune' | 'custom';
+  dueDate?: string;
+  completed?: boolean;
   createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface CareEvent {
   id?: string;
   plantId?: string;
-  type?: 'water' | 'fertilize' | 'other';
+  userId?: string;
+  type?: 'water' | 'fertilize' | 'repot' | 'prune' | 'photo_update';
+  /** @deprecated Use createdAt. Kept for local compatibility — not persisted to DB. */
   occurredAt?: string;
+  source?: 'manual' | 'vira_pot' | 'auto';
   notes?: string;
-  source?: 'manual' | 'vira_pot';
   createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface Profile {
   id?: string;
-  userId?: string;
-  name?: string;
-  defaultLocation?: string;
-  timezone?: string;
+  displayName?: string;
+  avatarUrl?: string;
+  location?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -59,4 +57,3 @@ export interface Plant {
 export type PlantInput = Omit<Partial<Plant>, 'id' | 'createdAt' | 'updatedAt' | 'careEvents' | 'reminders'> & {
   connectionType?: ConnectionType;
 };
-

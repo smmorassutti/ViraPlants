@@ -53,6 +53,9 @@ yarn-error.log
 **/fastlane/screenshots
 **/fastlane/test_output
 
+# Supabase credentials
+src/config/env.ts
+
 # Bundle artifact
 *.jsbundle
 

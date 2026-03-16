@@ -18,6 +18,8 @@ import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
 import {pickImage} from '../utils/pickImage';
 import {getLastCareDateOrUndefined} from '../utils/careUtils';
+import {useAuthStore} from '../store/useAuthStore';
+import {uploadPlantPhoto, deletePlantPhoto} from '../services/photoService';
 import type {CareEvent} from '../types/plant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlantDetail'>;
@@ -108,6 +110,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const removePlant = usePlantStore(s => s.removePlant);
   const markWatered = usePlantStore(s => s.markWatered);
   const markFertilized = usePlantStore(s => s.markFertilized);
+  const userId = useAuthStore(s => s.user?.id);
 
   const [notesText, setNotesText] = useState(plant?.notes || '');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -146,6 +149,28 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
     if (plant?.id) markFertilized(plant.id);
   }, [plant?.id, markFertilized]);
 
+  const uploadAndSetPhoto = useCallback(
+    async (localUri: string) => {
+      if (!plant?.id) return;
+      // Show local URI immediately
+      updatePlant(plant.id, {photoUrl: localUri});
+
+      if (userId) {
+        try {
+          // Delete old remote photo if it exists
+          if (plant.photoUrl?.includes('supabase')) {
+            deletePlantPhoto(plant.photoUrl).catch(() => {});
+          }
+          const remoteUrl = await uploadPlantPhoto(userId, plant.id, localUri);
+          updatePlant(plant.id, {photoUrl: remoteUrl});
+        } catch (err) {
+          console.warn('Photo upload failed, keeping local URI:', err);
+        }
+      }
+    },
+    [plant?.id, plant?.photoUrl, userId, updatePlant],
+  );
+
   const handleUpdatePhoto = useCallback(() => {
     if (!plant?.id) return;
     Alert.alert('Update photo', 'How would you like to update your plant photo?', [
@@ -153,19 +178,19 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
         text: 'Take Photo',
         onPress: async () => {
           const uri = await pickImage('camera');
-          if (uri) updatePlant(plant.id, {photoUrl: uri});
+          if (uri) uploadAndSetPhoto(uri);
         },
       },
       {
         text: 'Choose from Library',
         onPress: async () => {
           const uri = await pickImage('library');
-          if (uri) updatePlant(plant.id, {photoUrl: uri});
+          if (uri) uploadAndSetPhoto(uri);
         },
       },
       {text: 'Cancel', style: 'cancel'},
     ]);
-  }, [plant?.id, updatePlant]);
+  }, [plant?.id, uploadAndSetPhoto]);
 
   if (!plant) {
     return (

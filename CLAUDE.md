@@ -30,7 +30,8 @@ src/
 ├── screens/           # One file per screen, typed navigation props
 ├── components/        # Reusable UI components
 ├── store/
-│   └── usePlantStore.ts   # Single Zustand store, all app state
+│   ├── usePlantStore.ts   # Plant data store, syncs to Supabase
+│   └── useAuthStore.ts    # Auth session state (session, user, isLoading)
 ├── theme/
 │   └── vira.ts            # Brand colors, typography, spacing
 ├── utils/
@@ -38,12 +39,15 @@ src/
 │   └── careUtils.ts       # getDaysUntilCare, getLastCareDate helpers
 ├── types/
 │   ├── navigation.ts      # ALL navigation types live here
-│   └── plant.ts           # Plant, CareEvent, Reminder, ConnectionType
-└── services/              # Backend integrations (being built)
-    ├── supabase.ts
-    ├── plantApi.ts
-    ├── aiAnalysis.ts
-    └── notifications.ts
+│   └── plant.ts           # Plant, PlantInput, CareEvent, Reminder, Profile
+├── config/
+│   └── env.ts             # Supabase URL + anon key (gitignored)
+└── services/
+    ├── supabase.ts        # Singleton Supabase client
+    ├── auth.ts            # signUp, signIn, signOut, onAuthStateChange
+    ├── plantService.ts    # Plant CRUD + care events (row ↔ type mappers)
+    ├── photoService.ts    # Upload/delete plant photos to Supabase Storage
+    └── notifications.ts   # (placeholder — Notifee integration)
 ```
 
 ## Hard Rules — Never Break These
@@ -105,17 +109,20 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - react-native-image-picker — `src/utils/pickImage.ts` wrapping camera/library with Alert chooser, integrated in AddPlantScreen + PlantDetailScreen hero
 - Plant type includes `notes?: string` for user-editable notes (separate from AI-generated `careNotes`)
 - Review fixes complete: dead `selectedPlant` removed from store, 12 theme color tokens added (no more hardcoded colors), Zustand selectors targeted across all screens, `Plant` type tightened (core fields required) with `PlantInput` for `addPlant`, care date logic extracted to `src/utils/careUtils.ts`, `maxLength` on all TextInputs, MarkDoneButton setTimeout cleanup
+- Supabase integrated: client wired (`@supabase/supabase-js` + `react-native-url-polyfill`), full DB schema with RLS (profiles, plants, care_events, reminders, species_cache), Storage bucket `plant-photos` with per-user scoping
+- Auth: email/password via Supabase Auth — LoginScreen, SignUpScreen, `useAuthStore`, auto-profile creation trigger, session persistence, sign-out in SettingsScreen
+- Data sync: `usePlantStore` actions are optimistic (update Zustand immediately, sync to Supabase in background). `plantService.ts` handles row ↔ type mapping (snake_case DB ↔ camelCase TS). `loadPlants()` hydrates store on auth
+- Photo upload: `photoService.ts` uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`, returns public URL. AddPlantScreen uploads after creation, PlantDetailScreen uploads on photo change (deletes old remote photo)
+- Navigation gating: no session → Login/SignUp stack; authenticated → main app stack (Home, PlantDetail, AddPlant, Settings). Onboarding shown only if `!hasOnboarded`
 
 **Next up (in order):**
-1. Supabase project + schema + RLS
-2. Auth (email + Google + Apple)
-3. Photo upload to Supabase Storage
-4. Edge Function for Claude AI plant analysis (with species cache)
-5. Replace mockAnalyzePlant() with real fetch call
-6. Reminders via Notifee
-7. AsyncStorage persistence for Zustand
-8. Settings screen
-9. BLE service scaffold (Phase 2 prep)
+1. Edge Function for Claude AI plant analysis (with species cache)
+2. Replace mockAnalyzePlant() with real fetch call
+3. Reminders via Notifee
+4. AsyncStorage offline cache for Zustand
+5. Apple Sign-In + Google Sign-In
+6. Settings screen enhancements
+7. BLE service scaffold (Phase 2 prep)
 
 ## Implementation Notes
 
@@ -127,6 +134,12 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **PlantDetailScreen hero is a TouchableOpacity** — uses same Alert chooser pattern as AddPlantScreen for consistency. Updates plant via `updatePlant({ photoUrl })`.
 - **FlatList `key` prop** — HomeScreen sets `key={viewMode}` to force remount when toggling list/grid (required when changing `numColumns`).
 - **TextInput limits** — nickname: 50, location: 100, notes: 500.
+- **Supabase client** — singleton in `src/services/supabase.ts`, reads credentials from gitignored `src/config/env.ts`. `.env.example` documents required vars.
+- **Auth flow** — `useAuthStore` holds session/user/isLoading. `App.tsx` subscribes to `onAuthStateChange` and gates navigation. Onboarding → Login → Home. Profile auto-created via DB trigger on sign-up.
+- **Data sync is optimistic** — Zustand updates immediately, then fires Supabase call. On failure: `removePlant` rolls back, others log warnings. `loadPlants()` called on auth change to hydrate from server.
+- **plantService row mappers** — `rowToPlant()` and `rowToCareEvent()` convert snake_case DB rows to camelCase TS types. `Plant.name` maps to `plants.species` column. `CareEvent.occurredAt` is deprecated — DB uses `created_at` only.
+- **Photo upload** — `uploadPlantPhoto()` fetches local URI as blob, uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`. Bucket is public-read, upload scoped to user folder via RLS. Old photos deleted on replacement.
+- **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions).
 
 ## AI Integration Pattern
 
