@@ -14,7 +14,9 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { viraTheme } from '../theme/vira';
 import { usePlantStore } from '../store/usePlantStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { pickImage } from '../utils/pickImage';
+import { uploadPlantPhoto } from '../services/photoService';
 
 const { colors, spacing, radius, typography } = viraTheme;
 
@@ -115,14 +117,16 @@ const mockAnalyzePlant = async (
 export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
   const defaultLocation = route.params?.defaultLocation || '';
   const addPlant = usePlantStore(s => s.addPlant);
+  const updatePlant = usePlantStore(s => s.updatePlant);
   const profile = usePlantStore(s => s.profile);
+  const userId = useAuthStore(s => s.user?.id);
 
   // ─── State ───
   const [step, setStep] = useState(1);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [nickname, setNickname] = useState('');
   const [location, setLocation] = useState(
-    defaultLocation || profile?.defaultLocation || '',
+    defaultLocation || profile?.location || '',
   );
   const [orientation, setOrientation] = useState('');
   const [potSize, setPotSize] = useState('');
@@ -181,10 +185,10 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
   }, [photoUri, nickname, location, orientation, potSize]);
 
   // ─── Save plant ───
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!analysisResult) return;
 
-    addPlant({
+    const plant = await addPlant({
       name: analysisResult.name,
       nickname: nickname || 'My Plant',
       location,
@@ -198,8 +202,19 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
       connectionType: 'manual',
     });
 
+    // Upload photo to Supabase Storage in the background
+    if (photoUri && userId && plant.id) {
+      uploadPlantPhoto(userId, plant.id, photoUri)
+        .then((remoteUrl) => {
+          updatePlant(plant.id, {photoUrl: remoteUrl});
+        })
+        .catch((err) => {
+          console.warn('Photo upload failed, keeping local URI:', err);
+        });
+    }
+
     navigation.replace('Home');
-  }, [analysisResult, nickname, location, orientation, potSize, photoUri, addPlant, navigation]);
+  }, [analysisResult, nickname, location, orientation, potSize, photoUri, addPlant, updatePlant, userId, navigation]);
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // Step 1: Photo
@@ -296,7 +311,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
             returnKeyType="done"
             maxLength={100}
           />
-          {location === (defaultLocation || profile?.defaultLocation) && location !== '' && (
+          {location === (defaultLocation || profile?.location) && location !== '' && (
             <Text style={s.inputHint}>Pre-filled from your setup</Text>
           )}
         </View>

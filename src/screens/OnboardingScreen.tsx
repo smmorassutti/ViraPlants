@@ -114,15 +114,13 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   const completeOnboarding = (goToAddPlant: boolean) => {
     // Save profile with default location
     setProfile({
-      defaultLocation: city || undefined,
+      location: city || undefined,
     });
     setHasOnboarded(true);
 
-    if (goToAddPlant) {
-      navigation.replace('AddPlant', { defaultLocation: city || undefined });
-    } else {
-      navigation.replace('Home');
-    }
+    // After onboarding, navigate to Login — auth gating in App.tsx
+    // will redirect to Home once signed in
+    navigation.replace('Login');
   };
 
   const next = () => {

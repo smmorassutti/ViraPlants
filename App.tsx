@@ -1,15 +1,19 @@
-import React from 'react';
-import { StatusBar } from 'react-native';
-import { NavigationContainer, DefaultTheme, Theme } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import type { RootStackParamList } from './src/types/navigation';
-import { OnboardingScreen } from './src/screens/OnboardingScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
-import { PlantDetailScreen } from './src/screens/PlantDetailScreen';
-import { AddPlantScreen } from './src/screens/AddPlantScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
-import { viraTheme } from './src/theme/vira';
-import { usePlantStore } from './src/store/usePlantStore';
+import React, {useEffect} from 'react';
+import {StatusBar, ActivityIndicator, View, StyleSheet} from 'react-native';
+import {NavigationContainer, DefaultTheme, Theme} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import type {RootStackParamList} from './src/types/navigation';
+import {OnboardingScreen} from './src/screens/OnboardingScreen';
+import {LoginScreen} from './src/screens/LoginScreen';
+import {SignUpScreen} from './src/screens/SignUpScreen';
+import {HomeScreen} from './src/screens/HomeScreen';
+import {PlantDetailScreen} from './src/screens/PlantDetailScreen';
+import {AddPlantScreen} from './src/screens/AddPlantScreen';
+import {SettingsScreen} from './src/screens/SettingsScreen';
+import {viraTheme} from './src/theme/vira';
+import {usePlantStore} from './src/store/usePlantStore';
+import {useAuthStore} from './src/store/useAuthStore';
+import {getSession, onAuthStateChange} from './src/services/auth';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -27,14 +31,54 @@ const navigationTheme: Theme = {
 };
 
 const App = () => {
-  const initialRouteName = usePlantStore.getState().hasOnboarded ? 'Home' : 'Onboarding';
+  const hasOnboarded = usePlantStore(s => s.hasOnboarded);
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const isLoading = useAuthStore(s => s.isLoading);
+  const setSession = useAuthStore(s => s.setSession);
+  const setLoading = useAuthStore(s => s.setLoading);
+
+  const loadPlants = usePlantStore(s => s.loadPlants);
+
+  useEffect(() => {
+    // Check for existing session on launch
+    getSession().then(session => {
+      setSession(session);
+      setLoading(false);
+      if (session) loadPlants();
+    }).catch(() => {
+      setLoading(false);
+    });
+
+    // Listen for auth state changes
+    const setPlants = usePlantStore.getState().setPlants;
+    const subscription = onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        loadPlants();
+      } else {
+        // Clear plant data on sign-out to prevent data leaking between users
+        setPlants([]);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [setSession, setLoading, loadPlants]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={viraTheme.colors.hemlock} />
+      </View>
+    );
+  }
 
   return (
     <>
       <StatusBar barStyle="dark-content" />
       <NavigationContainer theme={navigationTheme}>
         <Stack.Navigator
-          initialRouteName={initialRouteName}
           screenOptions={{
             headerStyle: {
               backgroundColor: viraTheme.colors.butterMoon,
@@ -44,34 +88,60 @@ const App = () => {
               color: viraTheme.colors.hemlock,
             },
             headerTintColor: viraTheme.colors.hemlock,
-          }}
-        >
-          <Stack.Screen
-            name="Onboarding"
-            component={OnboardingScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{title: 'My Plants'}}
-          />
-          <Stack.Screen
-            name="PlantDetail"
-            component={PlantDetailScreen}
-            options={{
-              headerTransparent: true,
-              headerTitle: '',
-              headerTintColor: viraTheme.colors.white,
-            }}
-          />
-          <Stack.Screen name="AddPlant" component={AddPlantScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
+          }}>
+          {!hasOnboarded ? (
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
+              options={{headerShown: false}}
+            />
+          ) : null}
+          {!isAuthenticated ? (
+            <>
+              <Stack.Screen
+                name="Login"
+                component={LoginScreen}
+                options={{headerShown: false}}
+              />
+              <Stack.Screen
+                name="SignUp"
+                component={SignUpScreen}
+                options={{headerShown: false}}
+              />
+            </>
+          ) : (
+            <>
+              <Stack.Screen
+                name="Home"
+                component={HomeScreen}
+                options={{title: 'My Plants'}}
+              />
+              <Stack.Screen
+                name="PlantDetail"
+                component={PlantDetailScreen}
+                options={{
+                  headerTransparent: true,
+                  headerTitle: '',
+                  headerTintColor: viraTheme.colors.white,
+                }}
+              />
+              <Stack.Screen name="AddPlant" component={AddPlantScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+            </>
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </>
   );
 };
 
-export default App;
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: viraTheme.colors.background,
+  },
+});
 
+export default App;
