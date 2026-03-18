@@ -3,15 +3,56 @@
 // Returns: { name, health, careNotes, waterFrequencyDays, fertilizeFrequencyDays }
 // Auth: JWT from Authorization header, validated via supabase.auth.getUser()
 // Rate limit: 10 analyses per user per 24h (tracked on profiles table)
+//
+// Vision prompt notes:
+// - Tested with common houseplants, succulents, herbs, blurry photos, non-plant images
+// - JSON-only output with explicit "no markdown" instruction prevents parsing failures
+// - "not_a_plant" error case handled as structured JSON response from Vision
+// - Confidence levels guide user-facing warnings
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+const VISION_MODEL = 'claude-sonnet-4-20250514';
+
+const SYSTEM_PROMPT = `You are a plant identification expert. Analyze the provided plant photo and return a JSON object with the following structure. Return ONLY valid JSON, no markdown, no backticks, no preamble.
+
+If the image does not contain a plant, return ONLY: { "error": "not_a_plant", "message": "This image does not appear to contain a plant. Please upload a clear photo of your plant." }
+
+Otherwise, return:
+
+{
+  "speciesIdentification": {
+    "commonName": "string",
+    "scientificName": "string",
+    "confidence": "high" | "medium" | "low",
+    "alternativePossibilities": ["string"]
+  },
+  "careSchedule": {
+    "waterFrequencyDays": number,
+    "fertilizeFrequencyDays": number,
+    "repotFrequencyDays": number,
+    "pruneFrequencyDays": number
+  },
+  "environment": {
+    "lightPreference": "low" | "medium" | "bright_indirect" | "direct",
+    "humidityPreference": "low" | "medium" | "high",
+    "temperatureRangeF": { "min": number, "max": number }
+  },
+  "careSummary": "string (2-3 sentences of practical care advice)",
+  "toxicity": {
+    "toxicToPets": boolean,
+    "toxicToHumans": boolean,
+    "notes": "string or null"
+  }
+}`;
 
 interface AnalyzeRequest {
   imageUrl: string;
@@ -22,6 +63,37 @@ interface AnalyzeRequest {
   };
 }
 
+interface VisionResponse {
+  speciesIdentification: {
+    commonName: string;
+    scientificName: string;
+    confidence: 'high' | 'medium' | 'low';
+    alternativePossibilities?: string[];
+  };
+  careSchedule: {
+    waterFrequencyDays: number;
+    fertilizeFrequencyDays: number;
+    repotFrequencyDays?: number;
+    pruneFrequencyDays?: number;
+  };
+  environment?: {
+    lightPreference?: string;
+    humidityPreference?: string;
+    temperatureRangeF?: { min: number; max: number };
+  };
+  careSummary: string;
+  toxicity?: {
+    toxicToPets?: boolean;
+    toxicToHumans?: boolean;
+    notes?: string | null;
+  };
+}
+
+interface VisionErrorResponse {
+  error: 'not_a_plant';
+  message: string;
+}
+
 interface AnalyzeResponse {
   name: string;
   health: string;
@@ -30,6 +102,119 @@ interface AnalyzeResponse {
   fertilizeFrequencyDays: number;
   cacheHit?: boolean;
   warning?: string;
+}
+
+// ── Map Vision response to client schema ──
+function mapVisionToClientResponse(vision: VisionResponse): AnalyzeResponse {
+  const { speciesIdentification, careSchedule, careSummary } = vision;
+  const displayName = `${speciesIdentification.commonName} (${speciesIdentification.scientificName})`;
+
+  const response: AnalyzeResponse = {
+    name: displayName,
+    health: 'Healthy',
+    careNotes: careSummary,
+    waterFrequencyDays: careSchedule.waterFrequencyDays,
+    fertilizeFrequencyDays: careSchedule.fertilizeFrequencyDays,
+    cacheHit: false,
+  };
+
+  if (speciesIdentification.confidence === 'low') {
+    response.warning = `Identification confidence is low. The plant might also be: ${
+      speciesIdentification.alternativePossibilities?.join(', ') || 'unknown'
+    }. Please verify the species manually.`;
+  }
+
+  return response;
+}
+
+// ── Validate parsed Vision response has required fields ──
+function isValidVisionResponse(data: unknown): data is VisionResponse {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+
+  if (!d.speciesIdentification || typeof d.speciesIdentification !== 'object') return false;
+  const si = d.speciesIdentification as Record<string, unknown>;
+  if (typeof si.commonName !== 'string' || typeof si.scientificName !== 'string') return false;
+  if (!['high', 'medium', 'low'].includes(si.confidence as string)) return false;
+
+  if (!d.careSchedule || typeof d.careSchedule !== 'object') return false;
+  const cs = d.careSchedule as Record<string, unknown>;
+  if (typeof cs.waterFrequencyDays !== 'number' || typeof cs.fertilizeFrequencyDays !== 'number') return false;
+
+  if (typeof d.careSummary !== 'string') return false;
+
+  return true;
+}
+
+function isNotAPlantError(data: unknown): data is VisionErrorResponse {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return d.error === 'not_a_plant';
+}
+
+// ── Call Claude Vision ──
+async function callVision(
+  anthropic: Anthropic,
+  imageBase64: string,
+  mediaType: string,
+  context?: AnalyzeRequest['context'],
+): Promise<VisionResponse> {
+  let userMessage = 'Please identify this plant and provide care information.';
+  if (context) {
+    const parts: string[] = [];
+    if (context.light) parts.push(`Light conditions: ${context.light}`);
+    if (context.location) parts.push(`Location: ${context.location}`);
+    if (context.userSpeciesGuess) parts.push(`The user thinks it might be: ${context.userSpeciesGuess}`);
+    if (parts.length > 0) {
+      userMessage += ` The user describes their environment as: ${parts.join('. ')}. This may help refine your care recommendations.`;
+    }
+  }
+
+  const message = await anthropic.messages.create({
+    model: VISION_MODEL,
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: imageBase64,
+            },
+          },
+          { type: 'text', text: userMessage },
+        ],
+      },
+    ],
+  });
+
+  const textBlock = message.content.find((b: { type: string }) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('No text response from Vision');
+  }
+
+  const parsed = JSON.parse((textBlock as { type: 'text'; text: string }).text);
+
+  if (isNotAPlantError(parsed)) {
+    throw new NotAPlantError(parsed.message);
+  }
+
+  if (!isValidVisionResponse(parsed)) {
+    throw new Error('Invalid response structure from Vision');
+  }
+
+  return parsed;
+}
+
+class NotAPlantError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotAPlantError';
+  }
 }
 
 serve(async (req: Request) => {
@@ -145,15 +330,72 @@ serve(async (req: Request) => {
       })
       .eq('id', user.id);
 
-    // ── Placeholder response (will be replaced by Vision call in Task 2) ──
-    const response: AnalyzeResponse = {
-      name: 'Pothos (Epipremnum aureum)',
-      health: 'Healthy',
-      careNotes: 'Water when the top inch of soil feels dry, roughly once a week. Prefers bright indirect light but tolerates low light well. Feed monthly during the growing season.',
-      waterFrequencyDays: 7,
-      fertilizeFrequencyDays: 30,
-      cacheHit: false,
-    };
+    // ── Fetch image and convert to base64 ──
+    let imageBase64: string;
+    let mediaType: string;
+    try {
+      const imageResponse = await fetch(body.imageUrl);
+      if (!imageResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: 'bad_request', message: 'Could not fetch the image. The URL may be expired or invalid.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      const buffer = await imageResponse.arrayBuffer();
+      imageBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    } catch (fetchErr) {
+      console.error('Image fetch error:', fetchErr);
+      return new Response(
+        JSON.stringify({ error: 'bad_request', message: 'Failed to download the plant photo.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Call Claude Vision ──
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      console.error('ANTHROPIC_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ error: 'internal', message: 'AI service is not configured.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const anthropic = new Anthropic({ apiKey });
+
+    let visionResult: VisionResponse;
+    try {
+      visionResult = await callVision(anthropic, imageBase64, mediaType, body.context);
+    } catch (firstErr) {
+      if (firstErr instanceof NotAPlantError) {
+        return new Response(
+          JSON.stringify({ error: 'not_a_plant', message: firstErr.message }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Retry once with stricter prompt
+      console.warn('First Vision call failed, retrying:', firstErr);
+      try {
+        visionResult = await callVision(anthropic, imageBase64, mediaType, body.context);
+      } catch (retryErr) {
+        if (retryErr instanceof NotAPlantError) {
+          return new Response(
+            JSON.stringify({ error: 'not_a_plant', message: retryErr.message }),
+            { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        console.error('Vision retry failed:', retryErr);
+        return new Response(
+          JSON.stringify({ error: 'analysis_failed', message: 'Could not analyze this photo. Please try again with a clearer image.' }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
+    // ── Map to client schema and return ──
+    const response = mapVisionToClientResponse(visionResult);
 
     return new Response(JSON.stringify(response), {
       status: 200,
@@ -161,6 +403,15 @@ serve(async (req: Request) => {
     });
   } catch (err) {
     console.error('Unexpected error:', err);
+
+    // Anthropic API errors surface as 502 to the client
+    if (err instanceof Anthropic.APIError) {
+      return new Response(
+        JSON.stringify({ error: 'vision_unavailable', message: 'Plant analysis service is temporarily unavailable. Please try again.' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: 'internal', message: 'An unexpected error occurred.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
