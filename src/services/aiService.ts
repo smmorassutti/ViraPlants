@@ -1,5 +1,5 @@
 // AI Service — calls the analyze-plant Edge Function
-// Client contract matches mockAnalyzePlant: { name, health, careNotes, waterFrequencyDays, fertilizeFrequencyDays }
+// Returns: { name, health, careNotes, waterFrequencyDays, fertilizeFrequencyDays, cacheHit?, warning? }
 
 import {SUPABASE_FUNCTIONS_URL} from '../config/env';
 import {supabase} from './supabase';
@@ -57,6 +57,15 @@ export async function analyzePlant(params: {
       errorData.error || 'unknown',
       errorData.message || 'Something went wrong. Please try again.',
     );
+  }
+
+  if (
+    typeof data.name !== 'string' ||
+    typeof data.careNotes !== 'string' ||
+    typeof data.waterFrequencyDays !== 'number' ||
+    typeof data.fertilizeFrequencyDays !== 'number'
+  ) {
+    throw new AnalysisError('invalid_response', 'Received an unexpected response. Please try again.');
   }
 
   return data as AnalyzeResult;

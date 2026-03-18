@@ -204,7 +204,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [photoUri, nickname, location, orientation, potSize, userId]);
+  }, [photoUri, location, orientation, userId]);
 
   // ─── Save plant ───
   const handleSave = useCallback(async () => {

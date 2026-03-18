@@ -3,12 +3,16 @@
 // Returns: { name, health, careNotes, waterFrequencyDays, fertilizeFrequencyDays }
 // Auth: JWT from Authorization header, validated via supabase.auth.getUser()
 // Rate limit: 10 analyses per user per 24h (tracked on profiles table)
+// Note: Rate limit check-then-increment is not atomic. Concurrent requests can
+// slightly exceed the limit. Acceptable for pre-launch beta; upgrade to a Postgres
+// function with UPDATE ... RETURNING for production scale.
 //
 // Vision prompt notes:
 // - Tested with common houseplants, succulents, herbs, blurry photos, non-plant images
 // - JSON-only output with explicit "no markdown" instruction prevents parsing failures
 // - "not_a_plant" error case handled as structured JSON response from Vision
 // - Confidence levels guide user-facing warnings
+// - Prompt trimmed to only fields the client uses (species ID, care schedule, summary)
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -21,6 +25,8 @@ const corsHeaders = {
 };
 
 const VISION_MODEL = 'claude-sonnet-4-20250514';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 const SYSTEM_PROMPT = `You are a plant identification expert. Analyze the provided plant photo and return a JSON object with the following structure. Return ONLY valid JSON, no markdown, no backticks, no preamble.
 
@@ -37,21 +43,9 @@ Otherwise, return:
   },
   "careSchedule": {
     "waterFrequencyDays": number,
-    "fertilizeFrequencyDays": number,
-    "repotFrequencyDays": number,
-    "pruneFrequencyDays": number
+    "fertilizeFrequencyDays": number
   },
-  "environment": {
-    "lightPreference": "low" | "medium" | "bright_indirect" | "direct",
-    "humidityPreference": "low" | "medium" | "high",
-    "temperatureRangeF": { "min": number, "max": number }
-  },
-  "careSummary": "string (2-3 sentences of practical care advice)",
-  "toxicity": {
-    "toxicToPets": boolean,
-    "toxicToHumans": boolean,
-    "notes": "string or null"
-  }
+  "careSummary": "string (2-3 sentences of practical care advice)"
 }`;
 
 interface AnalyzeRequest {
@@ -73,20 +67,8 @@ interface VisionResponse {
   careSchedule: {
     waterFrequencyDays: number;
     fertilizeFrequencyDays: number;
-    repotFrequencyDays?: number;
-    pruneFrequencyDays?: number;
-  };
-  environment?: {
-    lightPreference?: string;
-    humidityPreference?: string;
-    temperatureRangeF?: { min: number; max: number };
   };
   careSummary: string;
-  toxicity?: {
-    toxicToPets?: boolean;
-    toxicToHumans?: boolean;
-    notes?: string | null;
-  };
 }
 
 interface VisionErrorResponse {
@@ -152,6 +134,28 @@ function isNotAPlantError(data: unknown): data is VisionErrorResponse {
   return d.error === 'not_a_plant';
 }
 
+// ── Sanitize user input for PostgREST filter ──
+function sanitizeForFilter(input: string): string {
+  return input.toLowerCase().trim().replace(/[,().]/g, '');
+}
+
+// ── Truncate context fields to prevent prompt abuse ──
+function truncate(value: string | undefined, max: number): string | undefined {
+  if (!value) return undefined;
+  return value.slice(0, max);
+}
+
+// ── Convert ArrayBuffer to base64 without stack overflow ──
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunks: string[] = [];
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
+  }
+  return btoa(chunks.join(''));
+}
+
 // ── Call Claude Vision ──
 async function callVision(
   anthropic: Anthropic,
@@ -162,9 +166,9 @@ async function callVision(
   let userMessage = 'Please identify this plant and provide care information.';
   if (context) {
     const parts: string[] = [];
-    if (context.light) parts.push(`Light conditions: ${context.light}`);
-    if (context.location) parts.push(`Location: ${context.location}`);
-    if (context.userSpeciesGuess) parts.push(`The user thinks it might be: ${context.userSpeciesGuess}`);
+    if (context.light) parts.push(`Light conditions: ${truncate(context.light, 200)}`);
+    if (context.location) parts.push(`Location: ${truncate(context.location, 200)}`);
+    if (context.userSpeciesGuess) parts.push(`The user thinks it might be: ${truncate(context.userSpeciesGuess, 200)}`);
     if (parts.length > 0) {
       userMessage += ` The user describes their environment as: ${parts.join('. ')}. This may help refine your care recommendations.`;
     }
@@ -217,6 +221,13 @@ class NotAPlantError extends Error {
   }
 }
 
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -224,26 +235,25 @@ serve(async (req: Request) => {
   }
 
   if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'method_not_allowed', message: 'Only POST requests are accepted.' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({ error: 'method_not_allowed', message: 'Only POST requests are accepted.' }, 405);
   }
 
   try {
+    // ── Validate required env vars ──
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+      return jsonResponse({ error: 'internal', message: 'Service is misconfigured.' }, 500);
+    }
+
     // ── Auth: extract and validate JWT ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'unauthorized', message: 'Missing or invalid Authorization header.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'unauthorized', message: 'Missing or invalid Authorization header.' }, 401);
     }
 
     const token = authHeader.replace('Bearer ', '');
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -251,10 +261,7 @@ serve(async (req: Request) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'unauthorized', message: 'Invalid or expired token.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'unauthorized', message: 'Invalid or expired token.' }, 401);
     }
 
     // ── Rate limiting: 10 analyses per 24h ──
@@ -266,10 +273,7 @@ serve(async (req: Request) => {
 
     if (profileError) {
       console.error('Profile fetch error:', profileError);
-      return new Response(
-        JSON.stringify({ error: 'internal', message: 'Could not verify rate limit.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'internal', message: 'Could not verify rate limit.' }, 500);
     }
 
     const now = new Date();
@@ -282,13 +286,10 @@ serve(async (req: Request) => {
     }
 
     if (analysisCount >= 10) {
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limited',
-          message: "You've reached the daily limit for plant analysis. Try again tomorrow.",
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({
+        error: 'rate_limited',
+        message: "You've reached the daily limit for plant analysis. Try again tomorrow.",
+      }, 429);
     }
 
     // ── Parse and validate request body ──
@@ -296,50 +297,43 @@ serve(async (req: Request) => {
     try {
       body = await req.json();
     } catch {
-      return new Response(
-        JSON.stringify({ error: 'bad_request', message: 'Request body must be valid JSON.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'bad_request', message: 'Request body must be valid JSON.' }, 400);
     }
 
     if (!body.imageUrl || typeof body.imageUrl !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'bad_request', message: 'imageUrl is required and must be a string.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'bad_request', message: 'imageUrl is required and must be a string.' }, 400);
     }
 
     // Validate imageUrl starts with the Supabase Storage URL
     if (!body.imageUrl.startsWith(supabaseUrl + '/storage/')) {
-      return new Response(
-        JSON.stringify({ error: 'bad_request', message: 'imageUrl must be a valid Supabase Storage URL.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'bad_request', message: 'imageUrl must be a valid Supabase Storage URL.' }, 400);
     }
 
     // ── Species cache check ──
     // If user provided a species guess, check the cache first
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!serviceRoleKey) {
+      console.warn('SUPABASE_SERVICE_ROLE_KEY not configured — species cache writes will be skipped');
+    }
     const serviceSupabase = serviceRoleKey
       ? createClient(supabaseUrl, serviceRoleKey)
       : null;
 
     if (body.context?.userSpeciesGuess) {
-      const guess = body.context.userSpeciesGuess.toLowerCase().trim();
-      const { data: cached } = await supabase
-        .from('species_cache')
-        .select('data, common_name, scientific_name')
-        .or(`common_name.ilike.${guess},scientific_name.ilike.${guess}`)
-        .limit(1)
-        .single();
+      const guess = sanitizeForFilter(body.context.userSpeciesGuess);
+      if (guess.length > 0) {
+        const { data: cached } = await supabase
+          .from('species_cache')
+          .select('data, common_name, scientific_name')
+          .or(`common_name.ilike.${guess},scientific_name.ilike.${guess}`)
+          .limit(1)
+          .single();
 
-      if (cached?.data && isValidVisionResponse(cached.data)) {
-        const response = mapVisionToClientResponse(cached.data as VisionResponse);
-        response.cacheHit = true;
-        return new Response(JSON.stringify(response), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        if (cached?.data && isValidVisionResponse(cached.data)) {
+          const response = mapVisionToClientResponse(cached.data as VisionResponse);
+          response.cacheHit = true;
+          return jsonResponse(response as unknown as Record<string, unknown>, 200);
+        }
       }
     }
 
@@ -362,30 +356,37 @@ serve(async (req: Request) => {
     try {
       const imageResponse = await fetch(body.imageUrl);
       if (!imageResponse.ok) {
-        return new Response(
-          JSON.stringify({ error: 'bad_request', message: 'Could not fetch the image. The URL may be expired or invalid.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
+        return jsonResponse({ error: 'bad_request', message: 'Could not fetch the image. The URL may be expired or invalid.' }, 400);
       }
+
+      // Validate content type
       mediaType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      if (!ALLOWED_MEDIA_TYPES.includes(mediaType)) {
+        return jsonResponse({ error: 'bad_request', message: 'Unsupported image format. Please upload a JPEG, PNG, GIF, or WebP image.' }, 400);
+      }
+
+      // Validate image size
+      const contentLength = imageResponse.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_BYTES) {
+        return jsonResponse({ error: 'bad_request', message: 'Image is too large. Please upload an image under 5MB.' }, 400);
+      }
+
       const buffer = await imageResponse.arrayBuffer();
-      imageBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+      if (buffer.byteLength > MAX_IMAGE_BYTES) {
+        return jsonResponse({ error: 'bad_request', message: 'Image is too large. Please upload an image under 5MB.' }, 400);
+      }
+
+      imageBase64 = arrayBufferToBase64(buffer);
     } catch (fetchErr) {
       console.error('Image fetch error:', fetchErr);
-      return new Response(
-        JSON.stringify({ error: 'bad_request', message: 'Failed to download the plant photo.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'bad_request', message: 'Failed to download the plant photo.' }, 400);
     }
 
     // ── Call Claude Vision ──
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
       console.error('ANTHROPIC_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ error: 'internal', message: 'AI service is not configured.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'internal', message: 'AI service is not configured.' }, 500);
     }
 
     const anthropic = new Anthropic({ apiKey });
@@ -395,28 +396,19 @@ serve(async (req: Request) => {
       visionResult = await callVision(anthropic, imageBase64, mediaType, body.context);
     } catch (firstErr) {
       if (firstErr instanceof NotAPlantError) {
-        return new Response(
-          JSON.stringify({ error: 'not_a_plant', message: firstErr.message }),
-          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
+        return jsonResponse({ error: 'not_a_plant', message: firstErr.message }, 422);
       }
 
-      // Retry once with stricter prompt
+      // Retry once (non-deterministic output may succeed on second attempt)
       console.warn('First Vision call failed, retrying:', firstErr);
       try {
         visionResult = await callVision(anthropic, imageBase64, mediaType, body.context);
       } catch (retryErr) {
         if (retryErr instanceof NotAPlantError) {
-          return new Response(
-            JSON.stringify({ error: 'not_a_plant', message: retryErr.message }),
-            { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          );
+          return jsonResponse({ error: 'not_a_plant', message: retryErr.message }, 422);
         }
         console.error('Vision retry failed:', retryErr);
-        return new Response(
-          JSON.stringify({ error: 'analysis_failed', message: 'Could not analyze this photo. Please try again with a clearer image.' }),
-          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
+        return jsonResponse({ error: 'analysis_failed', message: 'Could not analyze this photo. Please try again with a clearer image.' }, 422);
       }
     }
 
@@ -445,24 +437,15 @@ serve(async (req: Request) => {
     // ── Map to client schema and return ──
     const response = mapVisionToClientResponse(visionResult);
 
-    return new Response(JSON.stringify(response), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(response as unknown as Record<string, unknown>, 200);
   } catch (err) {
     console.error('Unexpected error:', err);
 
     // Anthropic API errors surface as 502 to the client
     if (err instanceof Anthropic.APIError) {
-      return new Response(
-        JSON.stringify({ error: 'vision_unavailable', message: 'Plant analysis service is temporarily unavailable. Please try again.' }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'vision_unavailable', message: 'Plant analysis service is temporarily unavailable. Please try again.' }, 502);
     }
 
-    return new Response(
-      JSON.stringify({ error: 'internal', message: 'An unexpected error occurred.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({ error: 'internal', message: 'An unexpected error occurred.' }, 500);
   }
 });

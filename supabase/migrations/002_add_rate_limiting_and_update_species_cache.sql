@@ -13,3 +13,6 @@ ALTER TABLE profiles
 ALTER TABLE species_cache RENAME COLUMN species_name TO scientific_name;
 ALTER TABLE species_cache RENAME COLUMN care_data TO data;
 ALTER TABLE species_cache ADD COLUMN IF NOT EXISTS common_name TEXT;
+
+-- Index for cache lookups by common_name (scientific_name already has a unique index)
+CREATE INDEX IF NOT EXISTS idx_species_cache_common_name ON species_cache (lower(common_name));
