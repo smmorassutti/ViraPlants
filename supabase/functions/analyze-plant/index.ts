@@ -317,6 +317,32 @@ serve(async (req: Request) => {
       );
     }
 
+    // ── Species cache check ──
+    // If user provided a species guess, check the cache first
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const serviceSupabase = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey)
+      : null;
+
+    if (body.context?.userSpeciesGuess) {
+      const guess = body.context.userSpeciesGuess.toLowerCase().trim();
+      const { data: cached } = await supabase
+        .from('species_cache')
+        .select('data, common_name, scientific_name')
+        .or(`common_name.ilike.${guess},scientific_name.ilike.${guess}`)
+        .limit(1)
+        .single();
+
+      if (cached?.data && isValidVisionResponse(cached.data)) {
+        const response = mapVisionToClientResponse(cached.data as VisionResponse);
+        response.cacheHit = true;
+        return new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // ── Increment rate limit counter ──
     const newResetAt = !resetAt || now >= resetAt
       ? new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
@@ -392,6 +418,28 @@ serve(async (req: Request) => {
           { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
+    }
+
+    // ── Cache the Vision result ──
+    // Uses service role client to bypass RLS (species_cache is read-only for users)
+    // TODO: Add cache TTL if species data quality improves over time
+    if (serviceSupabase) {
+      const scientificName = visionResult.speciesIdentification.scientificName.toLowerCase().trim();
+      const commonName = visionResult.speciesIdentification.commonName.toLowerCase().trim();
+
+      serviceSupabase
+        .from('species_cache')
+        .upsert(
+          {
+            scientific_name: scientificName,
+            common_name: commonName,
+            data: visionResult,
+          },
+          { onConflict: 'scientific_name' },
+        )
+        .then(({ error: cacheErr }) => {
+          if (cacheErr) console.warn('Species cache write failed:', cacheErr);
+        });
     }
 
     // ── Map to client schema and return ──
