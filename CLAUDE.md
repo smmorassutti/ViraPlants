@@ -99,7 +99,7 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
-- Add Plant flow (3 steps) — Photo (real image picker), Details, Results (with mock AI)
+- Add Plant flow (3 steps) — Photo (real image picker), Details, Results (real AI via Claude Vision)
 - Zustand store with all actions (add/update/remove plant, log care events, mark watered/fertilized)
 - Theme system with full brand palette
 - Navigation with typed params
@@ -114,11 +114,10 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Data sync: `usePlantStore` actions are optimistic (update Zustand immediately, sync to Supabase in background). `plantService.ts` handles row ↔ type mapping (snake_case DB ↔ camelCase TS). `loadPlants()` hydrates store on auth
 - Photo upload: `photoService.ts` uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`, returns public URL. AddPlantScreen uploads after creation, PlantDetailScreen uploads on photo change (deletes old remote photo)
 - Navigation gating: no session → Login/SignUp stack; authenticated → main app stack (Home, PlantDetail, AddPlant, Settings). Onboarding shown only if `!hasOnboarded`
+- AI plant analysis: `analyze-plant` Edge Function calls Claude Vision (Sonnet) for species ID + care data. Species cache prevents redundant API calls. Rate limited to 10/user/day. `aiService.ts` client with typed errors. All failure modes (not_a_plant, rate_limited, network error) gracefully handled with manual-entry fallback.
 
 **Next up (in order):**
-1. Edge Function for Claude AI plant analysis (with species cache)
-2. Replace mockAnalyzePlant() with real fetch call
-3. Reminders via Notifee
+1. Reminders via Notifee
 4. AsyncStorage offline cache for Zustand
 5. Apple Sign-In + Google Sign-In
 6. Settings screen enhancements
@@ -130,7 +129,7 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **`Plant` vs `PlantInput`** — `Plant` has required `id`, `connectionType`, `createdAt`, `updatedAt`, `careEvents`, `reminders`. `PlantInput` (used by `addPlant`) omits auto-generated fields. No more `!` non-null assertions needed for `plant.id`.
 - **Theme tokens** — `vira.ts` has utility colors (`white`, `black`), overlays (`overlayDark`, `overlayLight`, `overlayBadge`, `whiteTranslucent`), status backgrounds (`overdueBackground`, `urgentBackground`, `overdueBadge`, `urgentBadge`), and care type colors (`waterBlue`, `scheduleWater`, `scheduleFertilize`).
 - **MarkDoneButton uses Animated API** — 1s success state with scale pulse, auto-resets. Timer cleaned up via `useRef` + `useEffect`. Disabled during animation to prevent double-taps.
-- **pickImage returns `string | null`** — callers just check for null (cancelled/error). No compression yet — that happens at upload time (Supabase Storage step).
+- **pickImage returns `string | null`** — callers just check for null (cancelled/error). Images resized to 1024x1024 max, quality 0.8 (optimized for Vision API token cost and Storage size).
 - **PlantDetailScreen hero is a TouchableOpacity** — uses same Alert chooser pattern as AddPlantScreen for consistency. Updates plant via `updatePlant({ photoUrl })`.
 - **FlatList `key` prop** — HomeScreen sets `key={viewMode}` to force remount when toggling list/grid (required when changing `numColumns`).
 - **TextInput limits** — nickname: 50, location: 100, notes: 500.
@@ -139,17 +138,29 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Data sync is optimistic** — Zustand updates immediately, then fires Supabase call. On failure: `removePlant` rolls back, others log warnings. `loadPlants()` called on auth change to hydrate from server.
 - **plantService row mappers** — `rowToPlant()` and `rowToCareEvent()` convert snake_case DB rows to camelCase TS types. `Plant.name` maps to `plants.species` column. `CareEvent.occurredAt` is deprecated — DB uses `created_at` only.
 - **Photo upload** — `uploadPlantPhoto()` fetches local URI as blob, uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`. Bucket is public-read, upload scoped to user folder via RLS. Old photos deleted on replacement.
-- **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions).
+- **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions). Migration 002 adds `analysis_count`/`analysis_reset_at` to profiles and renames species_cache columns.
+- **aiService.ts** — `analyzePlant({ imageUrl, context })` calls the Edge Function with session JWT. Returns typed `AnalyzeResult`. Throws `AnalysisError` with `.code` for UI error handling.
+- **Edge Function** at `supabase/functions/analyze-plant/index.ts` — Deno runtime, uses Anthropic SDK (`npm:@anthropic-ai/sdk`). Validates response shape before mapping. Retries once on JSON parse failure. Service role client for species_cache writes.
 
 ## AI Integration Pattern
 
-AddPlantScreen has a `mockAnalyzePlant()` function returning hardcoded results after a 2s delay. The response shape matches the real Edge Function contract:
+AddPlantScreen calls `analyzePlant()` from `src/services/aiService.ts`, which POSTs to the `analyze-plant` Edge Function with the plant photo's Storage URL. The Edge Function:
 
+1. Validates JWT auth
+2. Checks rate limit (10/user/day via `profiles.analysis_count`)
+3. Checks `species_cache` if `userSpeciesGuess` provided
+4. Calls Claude Vision (`claude-sonnet-4-20250514`) with the photo
+5. Validates and maps the response to the client schema
+6. Caches the result in `species_cache` (service role write)
+
+Client response shape:
 ```typescript
-{ name: string, health: string, careNotes: string, waterFrequencyDays: number, fertilizeFrequencyDays: number }
+{ name: string, health: string, careNotes: string, waterFrequencyDays: number, fertilizeFrequencyDays: number, cacheHit?: boolean, warning?: string }
 ```
 
-When the Edge Function is ready, swap `mockAnalyzePlant()` for a `fetch()` call — drop-in replacement, no UI changes needed.
+Error codes: `not_a_plant` (422), `rate_limited` (429), `analysis_failed` (422), `vision_unavailable` (502), `unauthorized` (401). All failures allow manual-entry fallback.
+
+Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SERVICE_ROLE_KEY`.
 
 ## Pre-Launch Checklist
 

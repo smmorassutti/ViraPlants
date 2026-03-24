@@ -7,8 +7,8 @@ export const pickImage = async (
 ): Promise<string | null> => {
   const options = {
     mediaType: 'photo' as const,
-    maxWidth: 1200,
-    maxHeight: 1200,
+    maxWidth: 1024,
+    maxHeight: 1024,
     quality: 0.8 as const,
   };
 

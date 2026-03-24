@@ -13,13 +13,13 @@ export const uploadPlantPhoto = async (
   const timestamp = Date.now();
   const filePath = `${userId}/${plantId}/${timestamp}.jpg`;
 
-  // Read the file as a blob
+  // Read the local file as an ArrayBuffer (blob() returns empty in React Native)
   const response = await fetch(localUri);
-  const blob = await response.blob();
+  const arrayBuffer = await response.arrayBuffer();
 
   const {error} = await supabase.storage
     .from('plant-photos')
-    .upload(filePath, blob, {
+    .upload(filePath, arrayBuffer, {
       contentType: 'image/jpeg',
       upsert: false,
     });

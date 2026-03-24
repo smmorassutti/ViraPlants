@@ -17,6 +17,7 @@ import { usePlantStore } from '../store/usePlantStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { pickImage } from '../utils/pickImage';
 import { uploadPlantPhoto } from '../services/photoService';
+import { analyzePlant, AnalysisError } from '../services/aiService';
 
 const { colors, spacing, radius, typography } = viraTheme;
 
@@ -82,33 +83,6 @@ const Chip = ({
   </TouchableOpacity>
 );
 
-// ─── Mock AI analysis (replace with Edge Function call later) ───
-const mockAnalyzePlant = async (
-  _photoUri: string,
-  nickname: string,
-  location: string,
-  orientation: string,
-  potSize: string,
-): Promise<{
-  name: string;
-  health: string;
-  careNotes: string;
-  waterFrequencyDays: number;
-  fertilizeFrequencyDays: number;
-}> => {
-  // Simulate network delay
-  await new Promise<void>((resolve) => setTimeout(() => resolve(), 2000));
-
-  // Mock response — this will be replaced by the Supabase Edge Function
-  // that calls Claude Vision and checks the species cache first
-  return {
-    name: 'Pothos (Epipremnum aureum)',
-    health: 'Thriving',
-    careNotes: `${nickname} should do really well in your ${orientation.toLowerCase()} setup in ${location || 'your space'}. Water when the top inch of soil feels dry — roughly once a week. These are wonderfully forgiving plants that thrive on a little neglect.`,
-    waterFrequencyDays: 7,
-    fertilizeFrequencyDays: 30,
-  };
-};
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MAIN COMPONENT
@@ -137,6 +111,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
     careNotes: string;
     waterFrequencyDays: number;
     fertilizeFrequencyDays: number;
+    warning?: string;
   } | null>(null);
 
   // ─── Photo selection ───
@@ -160,29 +135,92 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // ─── Analysis ───
   const handleAnalyze = useCallback(async () => {
-    if (!photoUri) return;
+    if (!photoUri || !userId) return;
 
     setIsAnalyzing(true);
+    console.log('[AddPlant] starting analysis, photoUri:', photoUri?.slice(0, 60));
     try {
-      const result = await mockAnalyzePlant(
-        photoUri,
-        nickname || 'My Plant',
-        location,
-        orientation,
-        potSize,
-      );
+      // Upload photo first to get the Storage URL for Vision
+      let remoteUrl: string;
+      try {
+        remoteUrl = await uploadPlantPhoto(userId, 'pending', photoUri);
+        console.log('[AddPlant] photo uploaded, remoteUrl:', remoteUrl?.slice(0, 80));
+      } catch (uploadErr: unknown) {
+        const err = uploadErr as { message?: string; statusCode?: number; name?: string; error?: string };
+        console.error('[AddPlant] photo upload failed:', {
+          message: err.message,
+          statusCode: err.statusCode,
+          name: err.name,
+          error: err.error,
+          full: JSON.stringify(uploadErr),
+        });
+        throw uploadErr;
+      }
+
+      const result = await analyzePlant({
+        imageUrl: remoteUrl,
+        context: {
+          light: orientation || undefined,
+          location: location || undefined,
+        },
+      });
+
       setAnalysisResult(result);
+      // Store the remote URL so handleSave doesn't re-upload
+      setPhotoUri(remoteUrl);
       setStep(3);
+
+      if (result.warning) {
+        Alert.alert('Heads up', result.warning);
+      }
     } catch (error) {
-      Alert.alert(
-        'Something went wrong',
-        'We couldn\'t analyze your plant. Please try again.',
-        [{ text: 'OK' }],
-      );
+      console.error('[AddPlant] analysis error:', error instanceof AnalysisError ? `${error.code}: ${error.message}` : error);
+      if (error instanceof AnalysisError) {
+        switch (error.code) {
+          case 'not_a_plant':
+            Alert.alert(
+              'Not a plant',
+              'That doesn\'t look like a plant. Please try again with a clear photo of your plant.',
+              [{ text: 'OK' }],
+            );
+            break;
+          case 'rate_limited':
+            Alert.alert(
+              'Daily limit reached',
+              error.message,
+              [
+                { text: 'Add Manually', onPress: () => setStep(3) },
+                { text: 'OK' },
+              ],
+            );
+            break;
+          case 'unauthorized':
+            Alert.alert('Session expired', 'Please log in again.');
+            break;
+          default:
+            Alert.alert(
+              'Couldn\'t identify your plant',
+              'You can still add it manually.',
+              [
+                { text: 'Add Manually', onPress: () => setStep(3) },
+                { text: 'Try Again' },
+              ],
+            );
+        }
+      } else {
+        Alert.alert(
+          'Connection error',
+          'Please check your internet and try again.',
+          [
+            { text: 'Add Manually', onPress: () => setStep(3) },
+            { text: 'Try Again' },
+          ],
+        );
+      }
     } finally {
       setIsAnalyzing(false);
     }
-  }, [photoUri, nickname, location, orientation, potSize]);
+  }, [photoUri, location, orientation, userId]);
 
   // ─── Save plant ───
   const handleSave = useCallback(async () => {
@@ -202,8 +240,9 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
       connectionType: 'manual',
     });
 
-    // Upload photo to Supabase Storage in the background
-    if (photoUri && userId && plant.id) {
+    // Upload photo if it's still a local URI (not yet uploaded by handleAnalyze)
+    const isRemoteUrl = photoUri?.startsWith('http');
+    if (photoUri && userId && plant.id && !isRemoteUrl) {
       uploadPlantPhoto(userId, plant.id, photoUri)
         .then((remoteUrl) => {
           updatePlant(plant.id, {photoUrl: remoteUrl});
@@ -357,7 +396,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
         {isAnalyzing ? (
           <View style={s.loadingRow}>
             <ActivityIndicator color={colors.white} size="small" />
-            <Text style={s.primaryButtonLabel}>Getting to know your plant...</Text>
+            <Text style={s.primaryButtonLabel}>Identifying your plant...</Text>
           </View>
         ) : (
           <Text style={s.primaryButtonLabel}>✦  LET'S GO</Text>
