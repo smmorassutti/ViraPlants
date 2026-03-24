@@ -1,7 +1,6 @@
-// AI Service — calls the analyze-plant Edge Function
+// AI Service — calls the analyze-plant Edge Function via supabase.functions.invoke()
 // Returns: { name, health, careNotes, waterFrequencyDays, fertilizeFrequencyDays, cacheHit?, warning? }
 
-import {SUPABASE_FUNCTIONS_URL} from '../config/env';
 import {supabase} from './supabase';
 
 export interface AnalyzeContext {
@@ -20,43 +19,28 @@ export interface AnalyzeResult {
   warning?: string;
 }
 
-export interface AnalyzeError {
-  error: string;
-  message: string;
-}
-
 export async function analyzePlant(params: {
   imageUrl: string;
   context?: AnalyzeContext;
 }): Promise<AnalyzeResult> {
-  const {
-    data: {session},
-  } = await supabase.auth.getSession();
+  console.log('[aiService] invoking analyze-plant, imageUrl:', params.imageUrl?.slice(0, 80));
 
-  if (!session?.access_token) {
-    throw new AnalysisError('unauthorized', 'Not signed in. Please log in and try again.');
-  }
-
-  const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/analyze-plant`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({
+  const {data, error} = await supabase.functions.invoke('analyze-plant', {
+    body: {
       imageUrl: params.imageUrl,
       context: params.context,
-    }),
+    },
   });
 
-  const data = await response.json();
+  console.log('[aiService] response:', error ? `error: ${JSON.stringify(error)}` : JSON.stringify(data).slice(0, 300));
 
-  if (!response.ok) {
-    const errorData = data as AnalyzeError;
-    throw new AnalysisError(
-      errorData.error || 'unknown',
-      errorData.message || 'Something went wrong. Please try again.',
-    );
+  if (error) {
+    // FunctionsHttpError contains the response body from the Edge Function
+    const errorBody = typeof error.context === 'object' ? error.context : null;
+    const code = errorBody?.error || error.message || 'unknown';
+    const message = errorBody?.message || error.message || 'Something went wrong. Please try again.';
+    console.warn('[aiService] error:', code, message);
+    throw new AnalysisError(code, message);
   }
 
   if (

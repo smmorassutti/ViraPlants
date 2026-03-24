@@ -239,36 +239,46 @@ serve(async (req: Request) => {
   }
 
   try {
-    // ── Validate required env vars ──
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
-      return jsonResponse({ error: 'internal', message: 'Service is misconfigured.' }, 500);
-    }
-
-    // ── Auth: extract and validate JWT ──
+    // ── Auth: extract user ID from JWT (gateway already validated signature) ──
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return jsonResponse({ error: 'unauthorized', message: 'Missing or invalid Authorization header.' }, 401);
     }
 
     const token = authHeader.replace('Bearer ', '');
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) {
+      return jsonResponse({ error: 'unauthorized', message: 'Malformed token.' }, 401);
+    }
+
+    let userId: string;
+    try {
+      const payload = JSON.parse(atob(payloadBase64));
+      userId = payload.sub;
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Missing sub claim');
+      }
+    } catch {
+      return jsonResponse({ error: 'unauthorized', message: 'Could not decode token.' }, 401);
+    }
+
+    // ── Supabase client for DB queries (scoped to user via RLS) ──
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+      return jsonResponse({ error: 'internal', message: 'Service is misconfigured.' }, 500);
+    }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
+      global: { headers: { Authorization: authHeader } },
     });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return jsonResponse({ error: 'unauthorized', message: 'Invalid or expired token.' }, 401);
-    }
 
     // ── Rate limiting: 10 analyses per 24h ──
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('analysis_count, analysis_reset_at')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     if (profileError) {
@@ -311,9 +321,9 @@ serve(async (req: Request) => {
 
     // ── Species cache check ──
     // If user provided a species guess, check the cache first
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
     if (!serviceRoleKey) {
-      console.warn('SUPABASE_SERVICE_ROLE_KEY not configured — species cache writes will be skipped');
+      console.warn('SERVICE_ROLE_KEY not configured — species cache writes will be skipped');
     }
     const serviceSupabase = serviceRoleKey
       ? createClient(supabaseUrl, serviceRoleKey)
@@ -348,7 +358,7 @@ serve(async (req: Request) => {
         analysis_count: analysisCount + 1,
         analysis_reset_at: newResetAt,
       })
-      .eq('id', user.id);
+      .eq('id', userId);
 
     // ── Fetch image and convert to base64 ──
     let imageBase64: string;

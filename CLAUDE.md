@@ -160,7 +160,7 @@ Client response shape:
 
 Error codes: `not_a_plant` (422), `rate_limited` (429), `analysis_failed` (422), `vision_unavailable` (502), `unauthorized` (401). All failures allow manual-entry fallback.
 
-Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SERVICE_ROLE_KEY`.
 
 ## Pre-Launch Checklist
 
