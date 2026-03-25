@@ -16,7 +16,7 @@ export const PlantCard: React.FC<PlantCardProps> = ({plant, onPress}) => {
       onPress={onPress}
       activeOpacity={0.7}>
       <View style={styles.photoContainer}>
-        {plant.photoUrl ? (
+        {plant.photoUrl && plant.photoUrl.length > 0 ? (
           <Image source={{uri: plant.photoUrl}} style={styles.photo} />
         ) : (
           <View style={styles.photoPlaceholder}>

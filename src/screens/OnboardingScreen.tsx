@@ -168,7 +168,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
             onPress={next}
             activeOpacity={0.85}
           >
-            <Text style={s.primaryButtonLabel}>GET STARTED →</Text>
+            <Text style={s.welcomeButtonLabel}>GET STARTED →</Text>
           </TouchableOpacity>
           <Dots current={0} total={4} />
         </View>
@@ -184,8 +184,8 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[s.screen, { backgroundColor: colors.background }]}>
         <View style={s.topContentPadded}>
           <Text style={s.eyebrow}>HOW IT WORKS</Text>
-          <Text style={[s.sectionTitle, { textAlign: 'center' }]}>
-            Plant care,{'\n'}simplified.
+          <Text style={[s.sectionTitle, { textAlign: 'center', fontSize: 24 }]}>
+            Plant care, simplified.
           </Text>
           <View style={s.featureList}>
             <FeatureRow
@@ -296,7 +296,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   if (step === 3) {
     return (
       <View style={[s.screen, { backgroundColor: colors.background }]}>
-        <View style={s.centerContent}>
+        <View style={s.centerContentPadded}>
           <View style={s.firstPlantIcon}>
             <Text style={{ fontSize: 52 }}>🌱</Text>
           </View>
@@ -340,6 +340,11 @@ const s = StyleSheet.create({
   centerContent: {
     alignItems: 'center',
     paddingHorizontal: spacing.xxl,
+  },
+  centerContentPadded: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: 60,
   },
   topContent: {
     paddingHorizontal: spacing.xxl,
@@ -393,9 +398,13 @@ const s = StyleSheet.create({
   welcomeButton: {
     paddingVertical: 18,
     borderRadius: radius.lg,
-    backgroundColor: colors.vermillion,
+    backgroundColor: colors.butterMoon,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  welcomeButtonLabel: {
+    ...typography.button,
+    color: colors.hemlock,
   },
 
   // Section headers
