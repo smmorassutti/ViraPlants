@@ -138,24 +138,9 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!photoUri || !userId) return;
 
     setIsAnalyzing(true);
-    console.log('[AddPlant] starting analysis, photoUri:', photoUri?.slice(0, 60));
     try {
       // Upload photo first to get the Storage URL for Vision
-      let remoteUrl: string;
-      try {
-        remoteUrl = await uploadPlantPhoto(userId, 'pending', photoUri);
-        console.log('[AddPlant] photo uploaded, remoteUrl:', remoteUrl?.slice(0, 80));
-      } catch (uploadErr: unknown) {
-        const err = uploadErr as { message?: string; statusCode?: number; name?: string; error?: string };
-        console.error('[AddPlant] photo upload failed:', {
-          message: err.message,
-          statusCode: err.statusCode,
-          name: err.name,
-          error: err.error,
-          full: JSON.stringify(uploadErr),
-        });
-        throw uploadErr;
-      }
+      const remoteUrl = await uploadPlantPhoto(userId, 'pending', photoUri);
 
       const result = await analyzePlant({
         imageUrl: remoteUrl,
@@ -174,7 +159,6 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
         Alert.alert('Heads up', result.warning);
       }
     } catch (error) {
-      console.error('[AddPlant] analysis error:', error instanceof AnalysisError ? `${error.code}: ${error.message}` : error);
       if (error instanceof AnalysisError) {
         switch (error.code) {
           case 'not_a_plant':

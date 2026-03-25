@@ -23,8 +23,6 @@ export async function analyzePlant(params: {
   imageUrl: string;
   context?: AnalyzeContext;
 }): Promise<AnalyzeResult> {
-  console.log('[aiService] invoking analyze-plant, imageUrl:', params.imageUrl?.slice(0, 80));
-
   const {data, error} = await supabase.functions.invoke('analyze-plant', {
     body: {
       imageUrl: params.imageUrl,
@@ -32,14 +30,11 @@ export async function analyzePlant(params: {
     },
   });
 
-  console.log('[aiService] response:', error ? `error: ${JSON.stringify(error)}` : JSON.stringify(data).slice(0, 300));
-
   if (error) {
     // FunctionsHttpError contains the response body from the Edge Function
     const errorBody = typeof error.context === 'object' ? error.context : null;
     const code = errorBody?.error || error.message || 'unknown';
     const message = errorBody?.message || error.message || 'Something went wrong. Please try again.';
-    console.warn('[aiService] error:', code, message);
     throw new AnalysisError(code, message);
   }
 
