@@ -137,16 +137,16 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Auth flow** — `useAuthStore` holds session/user/isLoading. `App.tsx` subscribes to `onAuthStateChange` and gates navigation. Onboarding → Login → Home. Profile auto-created via DB trigger on sign-up.
 - **Data sync is optimistic** — Zustand updates immediately, then fires Supabase call. On failure: `removePlant` rolls back, others log warnings. `loadPlants()` called on auth change to hydrate from server.
 - **plantService row mappers** — `rowToPlant()` and `rowToCareEvent()` convert snake_case DB rows to camelCase TS types. `Plant.name` maps to `plants.species` column. `CareEvent.occurredAt` is deprecated — DB uses `created_at` only.
-- **Photo upload** — `uploadPlantPhoto()` fetches local URI as blob, uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`. Bucket is public-read, upload scoped to user folder via RLS. Old photos deleted on replacement.
+- **Photo upload** — `uploadPlantPhoto()` fetches local URI as `arrayBuffer()` (not `blob()` — blob drops content for `file://` URIs in React Native), uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`. Bucket is public-read, upload scoped to user folder via RLS. Old photos deleted on replacement.
 - **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions). Migration 002 adds `analysis_count`/`analysis_reset_at` to profiles and renames species_cache columns.
-- **aiService.ts** — `analyzePlant({ imageUrl, context })` calls the Edge Function with session JWT. Returns typed `AnalyzeResult`. Throws `AnalysisError` with `.code` for UI error handling.
+- **aiService.ts** — `analyzePlant({ imageUrl, context })` calls the Edge Function via `supabase.functions.invoke()` (auto-injects auth header). Returns typed `AnalyzeResult`. Throws `AnalysisError` with `.code` for UI error handling.
 - **Edge Function** at `supabase/functions/analyze-plant/index.ts` — Deno runtime, uses Anthropic SDK (`npm:@anthropic-ai/sdk`). Validates response shape before mapping. Retries once on JSON parse failure. Service role client for species_cache writes.
 
 ## AI Integration Pattern
 
 AddPlantScreen calls `analyzePlant()` from `src/services/aiService.ts`, which POSTs to the `analyze-plant` Edge Function with the plant photo's Storage URL. The Edge Function:
 
-1. Validates JWT auth
+1. Extracts user ID from JWT payload (base64 decode — gateway already validated signature)
 2. Checks rate limit (10/user/day via `profiles.analysis_count`)
 3. Checks `species_cache` if `userSpeciesGuess` provided
 4. Calls Claude Vision (`claude-sonnet-4-20250514`) with the photo
@@ -162,10 +162,23 @@ Error codes: `not_a_plant` (422), `rate_limited` (429), `analysis_failed` (422),
 
 Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SERVICE_ROLE_KEY`.
 
+## Deployment Learnings (Mar 2026)
+
+- **"Verify JWT with legacy secret" must be OFF** — Supabase Edge Function setting in Dashboard → Edge Functions → Settings. Must be disabled for functions receiving user JWTs, otherwise auth will silently fail.
+- **Supabase secrets cannot use `SUPABASE_` prefix** — the CLI reserves that namespace. Use `SERVICE_ROLE_KEY` instead of `SUPABASE_SERVICE_ROLE_KEY`.
+- **React Native `fetch().blob()` drops content for local `file://` URIs** — use `fetch().arrayBuffer()` instead when uploading to Supabase Storage.
+- **Use `supabase.functions.invoke()` instead of raw `fetch`** for calling Edge Functions — it auto-injects the auth header and handles the function URL.
+- **Decode JWT payload directly in Edge Functions** instead of calling `getUser()` — the Supabase gateway already validates the signature. Base64-decode the middle segment and extract `sub` for the user ID.
+- **Metro cache holds stale env values** — run `npx react-native start --reset-cache` after changing `src/config/env.ts`.
+- **Always specify `--simulator` flag** when a physical device is connected, otherwise `run-ios` may target the device unexpectedly.
+- **Supabase anon key** is a long JWT starting with `eyJ`, found in Dashboard → Settings → API.
+- **Edge Function redeployment required** after changing project config (e.g., rotating keys) — the running function keeps stale env values until redeployed via `supabase functions deploy`.
+
 ## Pre-Launch Checklist
 
 1. **Android release build is signed with debug keystore** — must replace with a real signing key before any release build.
 2. **`NSLocationWhenInUseUsageDescription` is empty in Info.plist** — Apple will reject the app. Either add a real usage string or remove the key if location isn't needed.
+3. **Apple Developer enrollment approved** — Individual account, Team ID `Z3M79BTP5M`. Active Xcode project is at `ios/ViraPlantsTemp.xcodeproj` (the `ios/` root — not the `ios/ViraPlantsTemp/` subdirectory copy).
 
 ## Hardware Context (for Phase 2 awareness)
 
