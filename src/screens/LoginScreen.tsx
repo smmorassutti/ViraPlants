@@ -38,8 +38,10 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
     try {
       await signIn(email.trim(), password);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Something went wrong.';
+      const raw = err instanceof Error ? err.message : '';
+      const message = raw.toLowerCase().includes('invalid login credentials')
+        ? 'Incorrect email or password. Please try again.'
+        : raw || 'Something went wrong. Please try again.';
       setError(message);
     } finally {
       setIsLoading(false);

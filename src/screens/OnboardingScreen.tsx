@@ -61,17 +61,26 @@ const FeatureRow = ({
   emoji,
   title,
   desc,
+  comingSoon,
 }: {
   emoji: string;
   title: string;
   desc: string;
+  comingSoon?: boolean;
 }) => (
-  <View style={s.featureRow}>
-    <View style={s.featureIcon}>
+  <View style={[s.featureRow, comingSoon && s.featureRowComingSoon]}>
+    <View style={[s.featureIcon, comingSoon && s.featureIconComingSoon]}>
       <Text style={{ fontSize: 22 }}>{emoji}</Text>
     </View>
     <View style={{ flex: 1 }}>
-      <Text style={s.featureTitle}>{title}</Text>
+      <View style={s.featureTitleRow}>
+        <Text style={s.featureTitle}>{title}</Text>
+        {comingSoon && (
+          <View style={s.comingSoonBadge}>
+            <Text style={s.comingSoonBadgeText}>COMING SOON</Text>
+          </View>
+        )}
+      </View>
       <Text style={s.featureDesc}>{desc}</Text>
     </View>
   </View>
@@ -155,11 +164,11 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         </View>
         <View style={s.bottomActions}>
           <TouchableOpacity
-            style={s.outlineButtonLight}
+            style={s.welcomeButton}
             onPress={next}
             activeOpacity={0.85}
           >
-            <Text style={s.outlineButtonLightLabel}>GET STARTED →</Text>
+            <Text style={s.primaryButtonLabel}>GET STARTED →</Text>
           </TouchableOpacity>
           <Dots current={0} total={4} />
         </View>
@@ -173,9 +182,9 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   if (step === 1) {
     return (
       <View style={[s.screen, { backgroundColor: colors.background }]}>
-        <View style={s.topContent}>
+        <View style={s.topContentPadded}>
           <Text style={s.eyebrow}>HOW IT WORKS</Text>
-          <Text style={s.sectionTitle}>
+          <Text style={[s.sectionTitle, { textAlign: 'center' }]}>
             Plant care,{'\n'}simplified.
           </Text>
           <View style={s.featureList}>
@@ -198,6 +207,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
               emoji="🪴"
               title="Vira Pot ready"
               desc="Connect a Vira pot for automatic watering"
+              comingSoon
             />
           </View>
         </View>
@@ -221,7 +231,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   if (step === 2) {
     return (
       <View style={[s.screen, { backgroundColor: colors.background }]}>
-        <View style={s.topContent}>
+        <View style={s.topContentPadded}>
           <Text style={s.eyebrow}>QUICK SETUP</Text>
           <Text style={s.sectionTitle}>A little about you</Text>
           <Text style={s.sectionBody}>
@@ -335,6 +345,10 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxl,
   },
+  topContentPadded: {
+    paddingHorizontal: spacing.xxl,
+    paddingTop: 60,
+  },
   bottomActions: {
     paddingHorizontal: spacing.xxl,
     paddingBottom: 40,
@@ -376,17 +390,12 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  outlineButtonLight: {
+  welcomeButton: {
     paddingVertical: 18,
     borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.butterMoon,
+    backgroundColor: colors.vermillion,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  outlineButtonLightLabel: {
-    ...typography.button,
-    color: colors.butterMoon,
   },
 
   // Section headers
@@ -410,13 +419,21 @@ const s = StyleSheet.create({
 
   // Features
   featureList: {
-    gap: spacing.lg,
     marginTop: spacing.md,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  featureRowComingSoon: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.thistle,
+    borderRadius: radius.lg,
+    backgroundColor: colors.butterMoon,
+    paddingHorizontal: spacing.md,
   },
   featureIcon: {
     width: 48,
@@ -428,11 +445,30 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  featureIconComingSoon: {
+    backgroundColor: `${colors.thistle}33`,
+  },
+  featureTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   featureTitle: {
     ...typography.body,
     fontFamily: 'Montserrat-Bold',
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  comingSoonBadge: {
+    backgroundColor: colors.thistle,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.pill,
+  },
+  comingSoonBadgeText: {
+    ...typography.label,
+    fontSize: 9,
+    color: colors.hemlock,
   },
   featureDesc: {
     ...typography.caption,

@@ -20,7 +20,9 @@ export const PlantCard: React.FC<PlantCardProps> = ({plant, onPress}) => {
           <Image source={{uri: plant.photoUrl}} style={styles.photo} />
         ) : (
           <View style={styles.photoPlaceholder}>
-            <Text style={styles.photoPlaceholderEmoji}>{'\u{1FAB4}'}</Text>
+            <Text style={styles.photoPlaceholderInitial}>
+              {(plant.nickname || plant.name || 'P').charAt(0).toUpperCase()}
+            </Text>
           </View>
         )}
       </View>
@@ -66,15 +68,15 @@ const styles = StyleSheet.create({
   photoPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: viraTheme.colors.butterMoon,
+    backgroundColor: viraTheme.colors.hemlock,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: viraTheme.radius.md,
-    borderWidth: 1,
-    borderColor: viraTheme.colors.border,
   },
-  photoPlaceholderEmoji: {
+  photoPlaceholderInitial: {
+    ...viraTheme.typography.heading1,
     fontSize: 28,
+    color: viraTheme.colors.butterMoon,
   },
   info: {
     flex: 1,

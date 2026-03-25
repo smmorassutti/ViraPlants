@@ -118,7 +118,7 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 
 **Next up (in order):**
 1. Reminders via Notifee
-4. AsyncStorage offline cache for Zustand
+4. AsyncStorage offline cache for Zustand (must also persist `hasOnboarded` and `profile` — currently in-memory only, so onboarding replays on every app restart)
 5. Apple Sign-In + Google Sign-In
 6. Settings screen enhancements
 7. BLE service scaffold (Phase 2 prep)
