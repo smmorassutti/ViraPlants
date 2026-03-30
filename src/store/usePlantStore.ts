@@ -1,4 +1,5 @@
 import {create} from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {Plant, PlantInput, CareEvent, Profile} from '../types/plant';
 import * as plantService from '../services/plantService';
 import {
@@ -51,7 +52,12 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
 
   // ── Profile ──
   setProfile: (profile) => set({profile}),
-  setHasOnboarded: (value) => set({hasOnboarded: value}),
+  setHasOnboarded: (value) => {
+    set({hasOnboarded: value});
+    if (value) {
+      AsyncStorage.setItem('hasOnboarded', 'true').catch(() => {});
+    }
+  },
 
   // ── Plants ──
   setPlants: (plants) => set({plants}),
