@@ -2194,6 +2194,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AsyncStorage: 59dba2e3aa2d4dea95e06c23cd176226fe243128
+  AsyncStorage: 2e1d431842588f5af845737e6435c1fcbecdab51
   FBLazyVector: e97c19a5a442429d1988f182a1940fb08df514da
   hermes-engine: ef1cb3d9f3401a98d4789d28957c5e780ede36a2
   RCTDeprecation: af44b104091a34482596cd9bd7e8d90c4e9b4bd7
