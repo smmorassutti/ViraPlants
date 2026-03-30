@@ -10,6 +10,8 @@ Self-watering plant system companion app. Phase 1 = free plant companion (distri
 - **Supabase** — backend (Postgres, Auth, Storage, Edge Functions)
 - **react-native-image-picker** — camera + photo library access (1200x1200, quality 0.8)
 - **react-native-ble-plx** — installed, not configured yet (Phase 2)
+- **@notifee/react-native 9.1.8** — installed, graceful degradation wrapper in place; native module NOT yet linked (known issue with RN 0.84 New Architecture — `use_frameworks! :linkage => :static` added to Podfile as attempted fix, still unresolved)
+- **@react-native-async-storage/async-storage** — installed and working
 - **Montserrat** — brand typeface (ExtraBold for H1, Bold for H2/buttons, Regular for body, SemiBold for labels)
 
 ## Build & Run
@@ -43,11 +45,12 @@ src/
 ├── config/
 │   └── env.ts             # Supabase URL + anon key (gitignored)
 └── services/
-    ├── supabase.ts        # Singleton Supabase client
-    ├── auth.ts            # signUp, signIn, signOut, onAuthStateChange
-    ├── plantService.ts    # Plant CRUD + care events (row ↔ type mappers)
-    ├── photoService.ts    # Upload/delete plant photos to Supabase Storage
-    └── notifications.ts   # (placeholder — Notifee integration)
+    ├── supabase.ts              # Singleton Supabase client
+    ├── auth.ts                  # signUp, signIn, signOut, onAuthStateChange
+    ├── plantService.ts          # Plant CRUD + care events (row ↔ type mappers)
+    ├── photoService.ts          # Upload/delete plant photos to Supabase Storage
+    ├── notificationService.ts   # Notifee watering notifications (graceful degradation wrapper)
+    └── aiService.ts             # analyzePlant() — calls analyze-plant Edge Function
 ```
 
 ## Hard Rules — Never Break These
@@ -115,13 +118,15 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Photo upload: `photoService.ts` uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`, returns public URL. AddPlantScreen uploads after creation, PlantDetailScreen uploads on photo change (deletes old remote photo)
 - Navigation gating: no session → Login/SignUp stack; authenticated → main app stack (Home, PlantDetail, AddPlant, Settings). Onboarding shown only if `!hasOnboarded`
 - AI plant analysis: `analyze-plant` Edge Function calls Claude Vision (Sonnet) for species ID + care data. Species cache prevents redundant API calls. Rate limited to 10/user/day. `aiService.ts` client with typed errors. All failure modes (not_a_plant, rate_limited, network error) gracefully handled with manual-entry fallback.
+- Local watering notifications: `src/services/notificationService.ts` — schedules a notification at 9 AM on next watering due date, reschedules on `markWatered`, cancels on `removePlant`. Graceful degradation wrapper means app won't crash if native module is unavailable. `requestPermission()` called once in App.tsx when `hasOnboarded && isAuthenticated`.
+- `hasOnboarded` persisted via AsyncStorage (key: `'hasOnboarded'`). Read in App.tsx first `useEffect` before `getSession` to prevent onboarding flash on relaunch. Written in `setHasOnboarded(true)` in usePlantStore.
+- TestFlight: build 1.0 (1) submitted, internal tester sam.morassutti@gmail.com added, auto-distribution enabled for future builds.
 
 **Next up (in order):**
-1. Reminders via Notifee
-4. AsyncStorage offline cache for Zustand (must also persist `hasOnboarded` and `profile` — currently in-memory only, so onboarding replays on every app restart)
-5. Apple Sign-In + Google Sign-In
-6. Settings screen enhancements
-7. BLE service scaffold (Phase 2 prep)
+1. Resolve Notifee native module linking (RN 0.84 New Architecture — `use_frameworks! :linkage => :static` attempted, not yet confirmed working)
+2. Apple Sign-In + Google Sign-In
+3. Settings screen enhancements
+4. BLE service scaffold (Phase 2 prep)
 
 ## Implementation Notes
 
@@ -141,6 +146,10 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions). Migration 002 adds `analysis_count`/`analysis_reset_at` to profiles and renames species_cache columns.
 - **aiService.ts** — `analyzePlant({ imageUrl, context })` calls the Edge Function via `supabase.functions.invoke()` (auto-injects auth header). Returns typed `AnalyzeResult`. Throws `AnalysisError` with `.code` for UI error handling.
 - **Edge Function** at `supabase/functions/analyze-plant/index.ts` — Deno runtime, uses Anthropic SDK (`npm:@anthropic-ai/sdk`). Validates response shape before mapping. Retries once on JSON parse failure. Service role client for species_cache writes.
+- **notificationService.ts** — lazy-requires `@notifee/react-native` at runtime (not static import) so a missing native module doesn't crash at startup. All three functions (`requestPermission`, `scheduleWateringNotification`, `cancelWateringNotification`) no-op silently if the module fails to load.
+- **markWatered notification reschedule pattern** — construct `updatedPlant` with `{ ...plant, careEvents: [...plant.careEvents, { type: 'water', createdAt: now }] }` and pass that to `scheduleWateringNotification`. Do NOT read from store state after calling `logCareEvent` — the Supabase sync is async and state may not have flushed yet.
+- **AsyncStorage + hasOnboarded** — `setHasOnboarded(true)` writes `AsyncStorage.setItem('hasOnboarded', 'true')`. App.tsx reads it at the top of the first `useEffect` (before `getSession`) and calls `setHasOnboarded(true)` if found. This prevents the onboarding screen from flashing on every relaunch.
+- **Notifee Podfile state** — `use_frameworks! :linkage => :static` is set unconditionally above the target block, and `pod 'RNNotifee', :path => '../node_modules/@notifee/react-native'` is declared explicitly inside the target.
 
 ## AI Integration Pattern
 
