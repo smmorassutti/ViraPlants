@@ -13,6 +13,7 @@ import {SettingsScreen} from './src/screens/SettingsScreen';
 import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getSession, onAuthStateChange} from './src/services/auth';
 import {requestPermission} from './src/services/notificationService';
 
@@ -39,8 +40,15 @@ const App = () => {
   const setLoading = useAuthStore(s => s.setLoading);
 
   const loadPlants = usePlantStore(s => s.loadPlants);
+  const setHasOnboarded = usePlantStore(s => s.setHasOnboarded);
 
   useEffect(() => {
+    // Hydrate hasOnboarded from AsyncStorage before auth check to prevent
+    // flashing the onboarding screen on relaunch
+    AsyncStorage.getItem('hasOnboarded').then(value => {
+      if (value === 'true') setHasOnboarded(true);
+    }).catch(() => {});
+
     // Check for existing session on launch
     getSession().then(session => {
       setSession(session);
@@ -65,7 +73,14 @@ const App = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [setSession, setLoading, loadPlants]);
+  }, [setSession, setLoading, loadPlants, setHasOnboarded]);
+
+  // Request notification permission once after onboarding + auth
+  useEffect(() => {
+    if (hasOnboarded && isAuthenticated) {
+      requestPermission().catch(() => {});
+    }
+  }, [hasOnboarded, isAuthenticated]);
 
   // Request notification permission once after onboarding + auth
   useEffect(() => {
