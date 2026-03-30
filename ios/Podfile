@@ -14,8 +14,12 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
+use_frameworks! :linkage => :static
+
 target 'ViraPlantsTemp' do
   config = use_native_modules!
+
+  pod 'RNNotifee', :path => '../node_modules/@notifee/react-native'
 
   use_react_native!(
     :path => config[:reactNativePath],
