@@ -13,6 +13,7 @@ import {
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import {viraTheme} from '../theme/vira';
+import {ViraLeafMark} from '../components/ViraLeafMark';
 import {signIn} from '../services/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -57,7 +58,9 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.logo}>{'\u{1FAB4}'}</Text>
+          <View style={styles.logoMark}>
+            <ViraLeafMark size={40} color={viraTheme.colors.hemlock} />
+          </View>
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your Vira account</Text>
         </View>
@@ -132,8 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: viraTheme.spacing.xxxl,
   },
-  logo: {
-    fontSize: 56,
+  logoMark: {
     marginBottom: viraTheme.spacing.lg,
   },
   title: {

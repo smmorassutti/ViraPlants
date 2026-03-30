@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { viraTheme } from '../theme/vira';
+import { ViraLeafMark } from '../components/ViraLeafMark';
 import { usePlantStore } from '../store/usePlantStore';
 
 const { colors, spacing, radius, typography } = viraTheme;
@@ -153,8 +154,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         <View style={s.centerContent}>
           {/* Vira leaf emblem — replace with your actual logo SVG/PNG asset */}
           <View style={s.welcomeEmblem}>
-            {/* TODO: Replace with <Image source={require('../assets/vira-icon-light.png')} /> */}
-            <Text style={{ fontSize: 48, color: colors.butterMoon }}>🌿</Text>
+            <ViraLeafMark size={64} color={colors.butterMoon} />
           </View>
           <Text style={s.welcomeTitle}>Meet Vira</Text>
           <Text style={s.welcomeBody}>
@@ -298,7 +298,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[s.screen, { backgroundColor: colors.background }]}>
         <View style={s.centerContentPadded}>
           <View style={s.firstPlantIcon}>
-            <Text style={{ fontSize: 52 }}>🌱</Text>
+            <ViraLeafMark size={64} color={colors.hemlock} />
           </View>
           <Text style={s.sectionTitle}>Add your first plant</Text>
           <Text style={[s.sectionBody, { textAlign: 'center', maxWidth: 260 }]}>

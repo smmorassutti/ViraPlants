@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { viraTheme } from '../theme/vira';
+import { ViraLeafMark } from '../components/ViraLeafMark';
 import { usePlantStore } from '../store/usePlantStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { pickImage } from '../utils/pickImage';
@@ -404,7 +405,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Species badge */}
         <View style={s.resultHero}>
           <View style={s.resultIcon}>
-            <Text style={{ fontSize: 40 }}>🌱</Text>
+            <ViraLeafMark size={40} color={viraTheme.colors.hemlock} />
           </View>
           <Text style={s.resultName}>{analysisResult.name}</Text>
           <Text style={s.resultSubtitle}>Your care plan is ready</Text>
