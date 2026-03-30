@@ -1,6 +1,10 @@
 import {create} from 'zustand';
 import type {Plant, PlantInput, CareEvent, Profile} from '../types/plant';
 import * as plantService from '../services/plantService';
+import {
+  scheduleWateringNotification,
+  cancelWateringNotification,
+} from '../services/notificationService';
 import {useAuthStore} from './useAuthStore';
 
 type PlantStoreState = {
@@ -93,6 +97,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
           p.id === tempPlant.id ? remotePlant : p,
         ),
       }));
+      scheduleWateringNotification(remotePlant).catch(() => {});
       return remotePlant;
     } catch (error) {
       console.warn('Failed to sync plant to Supabase:', error);
@@ -128,6 +133,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
     set((state) => ({
       plants: state.plants.filter((p) => p.id !== id),
     }));
+    cancelWateringNotification(id).catch(() => {});
 
     // Sync to Supabase
     plantService.deletePlant(id).catch((error) => {
@@ -194,6 +200,21 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
   markWatered: (plantId) => {
     const {logCareEvent} = get();
     logCareEvent(plantId, {type: 'water'});
+
+    const plant = get().plants.find((p) => p.id === plantId);
+    if (plant) {
+      const now = new Date().toISOString();
+      const updatedPlant = {
+        ...plant,
+        careEvents: [
+          ...plant.careEvents,
+          {type: 'water' as const, createdAt: now},
+        ],
+      };
+      cancelWateringNotification(plantId)
+        .then(() => scheduleWateringNotification(updatedPlant))
+        .catch(() => {});
+    }
   },
 
   markFertilized: (plantId) => {
