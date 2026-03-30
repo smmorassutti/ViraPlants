@@ -14,6 +14,7 @@ import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
 import {getSession, onAuthStateChange} from './src/services/auth';
+import {requestPermission} from './src/services/notificationService';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -65,6 +66,13 @@ const App = () => {
       subscription.unsubscribe();
     };
   }, [setSession, setLoading, loadPlants]);
+
+  // Request notification permission once after onboarding + auth
+  useEffect(() => {
+    if (hasOnboarded && isAuthenticated) {
+      requestPermission().catch(() => {});
+    }
+  }, [hasOnboarded, isAuthenticated]);
 
   if (isLoading) {
     return (
