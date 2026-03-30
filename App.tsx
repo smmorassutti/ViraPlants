@@ -82,13 +82,6 @@ const App = () => {
     }
   }, [hasOnboarded, isAuthenticated]);
 
-  // Request notification permission once after onboarding + auth
-  useEffect(() => {
-    if (hasOnboarded && isAuthenticated) {
-      requestPermission().catch(() => {});
-    }
-  }, [hasOnboarded, isAuthenticated]);
-
   if (isLoading) {
     return (
       <View style={styles.loading}>
