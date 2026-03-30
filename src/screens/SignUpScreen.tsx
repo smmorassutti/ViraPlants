@@ -124,7 +124,7 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
             activeOpacity={0.85}
             disabled={isLoading}>
             {isLoading ? (
-              <ActivityIndicator color={viraTheme.colors.white} size="small" />
+              <ActivityIndicator color={viraTheme.colors.butterMoon} size="small" />
             ) : (
               <Text style={styles.primaryButtonLabel}>CREATE ACCOUNT</Text>
             )}
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     paddingVertical: 18,
     borderRadius: viraTheme.radius.lg,
-    backgroundColor: viraTheme.colors.vermillion,
+    backgroundColor: viraTheme.colors.hemlock,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: viraTheme.spacing.sm,
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonLabel: {
     ...viraTheme.typography.button,
-    color: viraTheme.colors.white,
+    color: viraTheme.colors.butterMoon,
   },
   footer: {
     flexDirection: 'row',
