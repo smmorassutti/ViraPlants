@@ -14,7 +14,10 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
-use_frameworks! :linkage => :static
+# NOTE: do NOT add use_frameworks! :linkage => :static here.
+# RN 0.84 ships precompiled .xcframework binaries that conflict with blanket
+# static linkage. Notifee does not require it, and it prevents the Interop
+# Layer from making the bridge module discoverable at runtime.
 
 target 'ViraPlantsTemp' do
   config = use_native_modules!
