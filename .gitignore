@@ -56,6 +56,13 @@ yarn-error.log
 # Supabase credentials
 src/config/env.ts
 
+# Supabase CLI temp files
+supabase/.temp/
+ios/supabase/.temp/
+
+# Claude Code worktrees (managed by Claude Code, not part of the project)
+.claude/worktrees/
+
 # Bundle artifact
 *.jsbundle
 
