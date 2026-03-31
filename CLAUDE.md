@@ -10,7 +10,7 @@ Self-watering plant system companion app. Phase 1 = free plant companion (distri
 - **Supabase** — backend (Postgres, Auth, Storage, Edge Functions)
 - **react-native-image-picker** — camera + photo library access (1200x1200, quality 0.8)
 - **react-native-ble-plx** — installed, not configured yet (Phase 2)
-- **@notifee/react-native 9.1.8** — installed, graceful degradation wrapper in place; native module NOT yet linked (known issue with RN 0.84 New Architecture — `use_frameworks! :linkage => :static` added to Podfile as attempted fix, still unresolved)
+- **@notifee/react-native 9.1.8** — installed, native linking FIXED for RN 0.84 New Architecture. Graceful degradation wrapper still in place until confirmed on physical device.
 - **@react-native-async-storage/async-storage** — installed and working
 - **Montserrat** — brand typeface (ExtraBold for H1, Bold for H2/buttons, Regular for body, SemiBold for labels)
 
@@ -118,15 +118,23 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Photo upload: `photoService.ts` uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`, returns public URL. AddPlantScreen uploads after creation, PlantDetailScreen uploads on photo change (deletes old remote photo)
 - Navigation gating: no session → Login/SignUp stack; authenticated → main app stack (Home, PlantDetail, AddPlant, Settings). Onboarding shown only if `!hasOnboarded`
 - AI plant analysis: `analyze-plant` Edge Function calls Claude Vision (Sonnet) for species ID + care data. Species cache prevents redundant API calls. Rate limited to 10/user/day. `aiService.ts` client with typed errors. All failure modes (not_a_plant, rate_limited, network error) gracefully handled with manual-entry fallback.
-- Local watering notifications: `src/services/notificationService.ts` — schedules a notification at 9 AM on next watering due date, reschedules on `markWatered`, cancels on `removePlant`. Graceful degradation wrapper means app won't crash if native module is unavailable. `requestPermission()` called once in App.tsx when `hasOnboarded && isAuthenticated`.
+- Local watering notifications: `src/services/notificationService.ts` — schedules a notification at 9 AM on next watering due date, reschedules on `markWatered`, cancels on `removePlant`. Graceful degradation wrapper means app won't crash if native module is unavailable. `requestPermission()` called once in App.tsx when `hasOnboarded && isAuthenticated`. Simulator confirmed working; physical device pending.
 - `hasOnboarded` persisted via AsyncStorage (key: `'hasOnboarded'`). Read in App.tsx first `useEffect` before `getSession` to prevent onboarding flash on relaunch. Written in `setHasOnboarded(true)` in usePlantStore.
 - TestFlight: build 1.0 (1) submitted, internal tester sam.morassutti@gmail.com added, auto-distribution enabled for future builds.
+- ViraLeafMark updated to use real brand PNG assets from `assets/images/` — `variant` prop (`'butterMoon' | 'hemlock' | 'luxor' | 'thistle' | 'black' | 'white'`) replaces old `color` prop. react-native-svg still installed but unused — remove when convenient.
+- Brand assets: 8 icon PNGs in `assets/images/VIRA_Icon_*_RGB.png` (source: Vira - Logos/PNG/ICON/). Known issue: PNGs are RGB (no alpha channel) — if icon background is visible at runtime, transparency versions needed from designer.
+- App icon set added to Xcode asset catalog (`ios/ViraPlantsTemp/Images.xcassets/AppIcon.appiconset/`).
+
+**In progress:**
+- Notifications: infrastructure complete, simulator confirmed. Next: confirm native module registers on physical device, then remove graceful degradation wrapper.
+- Metro on Ninja Sam (iPhone physical device): iOS 26 beta blocks Local Network access for dev builds. Workaround: use iPhone 17 Pro simulator for all JS development. Fix: add `NSLocalNetworkUsageDescription` + `_http._tcp` Bonjour service entry to Info.plist.
 
 **Next up (in order):**
-1. Resolve Notifee native module linking (RN 0.84 New Architecture — `use_frameworks! :linkage => :static` attempted, not yet confirmed working)
-2. Apple Sign-In + Google Sign-In
-3. Settings screen enhancements
-4. BLE service scaffold (Phase 2 prep)
+1. Confirm Notifee on physical device; remove degradation wrapper
+2. Fix Metro Local Network access for physical device (Info.plist NSLocalNetworkUsageDescription + Bonjour)
+3. Apple Sign-In + Google Sign-In
+4. Settings screen enhancements
+5. BLE service scaffold (Phase 2 prep)
 
 ## Implementation Notes
 
@@ -149,7 +157,9 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **notificationService.ts** — lazy-requires `@notifee/react-native` at runtime (not static import) so a missing native module doesn't crash at startup. All three functions (`requestPermission`, `scheduleWateringNotification`, `cancelWateringNotification`) no-op silently if the module fails to load.
 - **markWatered notification reschedule pattern** — construct `updatedPlant` with `{ ...plant, careEvents: [...plant.careEvents, { type: 'water', createdAt: now }] }` and pass that to `scheduleWateringNotification`. Do NOT read from store state after calling `logCareEvent` — the Supabase sync is async and state may not have flushed yet.
 - **AsyncStorage + hasOnboarded** — `setHasOnboarded(true)` writes `AsyncStorage.setItem('hasOnboarded', 'true')`. App.tsx reads it at the top of the first `useEffect` (before `getSession`) and calls `setHasOnboarded(true)` if found. This prevents the onboarding screen from flashing on every relaunch.
-- **Notifee Podfile state** — `use_frameworks! :linkage => :static` is set unconditionally above the target block, and `pod 'RNNotifee', :path => '../node_modules/@notifee/react-native'` is declared explicitly inside the target.
+- **Notifee native linking fix (RN 0.84 New Arch)** — root cause was `use_frameworks! :linkage => :static` conflicting with RN 0.84's precompiled `.xcframework` binaries, breaking the Interop Layer that Notifee (a legacy bridge module) depends on. Fix: removed unconditional `use_frameworks!` from Podfile. Also added `UNUserNotificationCenterDelegate` extension to `AppDelegate.swift` so Notifee receives foreground events. `pod 'RNNotifee'` is still declared explicitly inside the target block.
+- **ViraLeafMark** — `src/components/ViraLeafMark.tsx` uses `Image` from react-native backed by PNG assets in `assets/images/`. Props: `variant` (default `'butterMoon'`) and `size` (default `48`). Use `variant="butterMoon"` on Hemlock backgrounds, `variant="hemlock"` on Butter Moon backgrounds.
+- **Metro on physical device (Ninja Sam)** — iOS 26 beta blocks Local Network access for dev builds. Use iPhone 17 Pro simulator for JS development. To fix for physical device: add `NSLocalNetworkUsageDescription` string and `_http._tcp` to `NSBonjourServices` in Info.plist.
 
 ## AI Integration Pattern
 
@@ -179,6 +189,8 @@ Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SE
 - **Use `supabase.functions.invoke()` instead of raw `fetch`** for calling Edge Functions — it auto-injects the auth header and handles the function URL.
 - **Decode JWT payload directly in Edge Functions** instead of calling `getUser()` — the Supabase gateway already validates the signature. Base64-decode the middle segment and extract `sub` for the user ID.
 - **Metro cache holds stale env values** — run `npx react-native start --reset-cache` after changing `src/config/env.ts`.
+- **Metro on physical device blocked by iOS 26 beta** — iOS 26 blocks Local Network access. Use simulator. Fix requires `NSLocalNetworkUsageDescription` + `_http._tcp` Bonjour entry in Info.plist.
+- **do NOT add `use_frameworks! :linkage => :static` to Podfile unconditionally** — it conflicts with RN 0.84 precompiled `.xcframework` binaries and silently breaks native module registration via the Interop Layer. Only add if a specific dependency requires it, and test immediately after.
 - **Always specify `--simulator` flag** when a physical device is connected, otherwise `run-ios` may target the device unexpectedly.
 - **Supabase anon key** is a long JWT starting with `eyJ`, found in Dashboard → Settings → API.
 - **Edge Function redeployment required** after changing project config (e.g., rotating keys) — the running function keeps stale env values until redeployed via `supabase functions deploy`.
