@@ -59,7 +59,7 @@ export const LoginScreen: React.FC<Props> = ({navigation}) => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.logoMark}>
-            <ViraLeafMark size={40} color={viraTheme.colors.hemlock} />
+            <ViraLeafMark size={40} variant="hemlock" />
           </View>
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your Vira account</Text>

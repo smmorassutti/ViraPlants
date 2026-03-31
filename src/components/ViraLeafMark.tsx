@@ -1,36 +1,42 @@
 import React from 'react';
-import Svg, {Path} from 'react-native-svg';
-import {viraTheme} from '../theme/vira';
+import {Image, StyleSheet} from 'react-native';
+
+type Variant = 'butterMoon' | 'hemlock' | 'luxor' | 'thistle' | 'black' | 'white';
 
 interface ViraLeafMarkProps {
   size?: number;
-  color?: string;
+  variant?: Variant;
 }
 
+const ASSETS: Record<Variant, ReturnType<typeof require>> = {
+  butterMoon: require('../../assets/images/VIRA_Icon_BtrMn_RGB.png'),
+  hemlock: require('../../assets/images/VIRA_Icon_Hem_RGB.png'),
+  luxor: require('../../assets/images/VIRA_Icon_Lux_RGB.png'),
+  thistle: require('../../assets/images/VIRA_Icon_This_RGB.png'),
+  black: require('../../assets/images/VIRA_Icon_Blk_RGB.png'),
+  white: require('../../assets/images/VIRA_Icon_Wht_RGB.png'),
+};
+
 /**
- * Vira brand mark — two overlapping organic leaf shapes.
- * The smaller leaf sits behind and to the upper-left of the primary leaf.
+ * Vira brand mark using official PNG assets.
  *
- * Default color is butterMoon (for use on Hemlock backgrounds).
- * Pass viraTheme.colors.hemlock when placed on Butter Moon backgrounds.
+ * variant: which color version of the icon to use (default: 'butterMoon')
+ *   - 'butterMoon' → cream icon, for use on Hemlock (dark) backgrounds
+ *   - 'hemlock'    → dark green icon, for use on Butter Moon (light) backgrounds
+ *   - 'luxor'      → olive gold
+ *   - 'thistle'    → muted sage
+ *   - 'black' / 'white' → utility variants
+ *
+ * NOTE: The PNG assets currently have a solid background (non-transparent).
+ * If the icon background is visible on screen, transparency versions of the
+ * assets are needed. Track at: assets/images/VIRA_Icon_*_RGB.png
  */
-export function ViraLeafMark({
-  size = 48,
-  color = viraTheme.colors.butterMoon,
-}: ViraLeafMarkProps) {
+export function ViraLeafMark({size = 48, variant = 'butterMoon'}: ViraLeafMarkProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-      {/* Secondary leaf — behind, offset upper-left */}
-      <Path
-        d="M 28 58 C 52 46 58 14 30 6 C 8 2 2 40 28 58 Z"
-        fill={color}
-        opacity={0.42}
-      />
-      {/* Primary leaf — front, slightly larger and shifted right */}
-      <Path
-        d="M 58 84 C 88 72 92 26 65 12 C 40 4 20 50 58 84 Z"
-        fill={color}
-      />
-    </Svg>
+    <Image
+      source={ASSETS[variant]}
+      style={StyleSheet.flatten([{width: size, height: size}])}
+      resizeMode="contain"
+    />
   );
 }

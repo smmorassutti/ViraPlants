@@ -66,7 +66,7 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.logoMark}>
-            <ViraLeafMark size={40} color={viraTheme.colors.hemlock} />
+            <ViraLeafMark size={40} variant="hemlock" />
           </View>
           <Text style={styles.title}>Create account</Text>
           <Text style={styles.subtitle}>

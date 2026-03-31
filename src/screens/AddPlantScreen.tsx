@@ -405,7 +405,7 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Species badge */}
         <View style={s.resultHero}>
           <View style={s.resultIcon}>
-            <ViraLeafMark size={40} color={viraTheme.colors.hemlock} />
+            <ViraLeafMark size={40} variant="hemlock" />
           </View>
           <Text style={s.resultName}>{analysisResult.name}</Text>
           <Text style={s.resultSubtitle}>Your care plan is ready</Text>

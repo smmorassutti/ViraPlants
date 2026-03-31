@@ -154,7 +154,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
         <View style={s.centerContent}>
           {/* Vira leaf emblem — replace with your actual logo SVG/PNG asset */}
           <View style={s.welcomeEmblem}>
-            <ViraLeafMark size={64} color={colors.butterMoon} />
+            <ViraLeafMark size={64} variant="butterMoon" />
           </View>
           <Text style={s.welcomeTitle}>Meet Vira</Text>
           <Text style={s.welcomeBody}>
@@ -298,7 +298,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[s.screen, { backgroundColor: colors.background }]}>
         <View style={s.centerContentPadded}>
           <View style={s.firstPlantIcon}>
-            <ViraLeafMark size={64} color={colors.hemlock} />
+            <ViraLeafMark size={64} variant="hemlock" />
           </View>
           <Text style={s.sectionTitle}>Add your first plant</Text>
           <Text style={[s.sectionBody, { textAlign: 'center', maxWidth: 260 }]}>
