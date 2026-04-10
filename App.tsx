@@ -14,7 +14,7 @@ import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {getSession, onAuthStateChange} from './src/services/auth';
+import {getSession, onAuthStateChange, configureGoogleSignIn} from './src/services/auth';
 import {requestPermission} from './src/services/notificationService';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -43,6 +43,8 @@ const App = () => {
   const setHasOnboarded = usePlantStore(s => s.setHasOnboarded);
 
   useEffect(() => {
+    configureGoogleSignIn();
+
     // Hydrate hasOnboarded from AsyncStorage before auth check to prevent
     // flashing the onboarding screen on relaunch
     AsyncStorage.getItem('hasOnboarded').then(value => {
@@ -74,13 +76,6 @@ const App = () => {
       subscription.unsubscribe();
     };
   }, [setSession, setLoading, loadPlants, setHasOnboarded]);
-
-  // Request notification permission once after onboarding + auth
-  useEffect(() => {
-    if (hasOnboarded && isAuthenticated) {
-      requestPermission().catch(() => {});
-    }
-  }, [hasOnboarded, isAuthenticated]);
 
   // Request notification permission once after onboarding + auth
   useEffect(() => {

@@ -14,7 +14,8 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import {viraTheme} from '../theme/vira';
 import {ViraLeafMark} from '../components/ViraLeafMark';
-import {signUp} from '../services/auth';
+import {signUp, googleSignIn, appleSignIn} from '../services/auth';
+import {AppleButton} from '@invertase/react-native-apple-authentication';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -26,6 +27,8 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   const handleSignUp = useCallback(async () => {
     setError('');
@@ -55,6 +58,39 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
       setIsLoading(false);
     }
   }, [email, password, confirmPassword]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setError('');
+    setIsGoogleLoading(true);
+    try {
+      const result = await googleSignIn();
+      if (!result) {
+        // User cancelled — do nothing
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Google Sign-In failed.';
+      setError(message);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  }, []);
+
+  const handleAppleSignIn = useCallback(async () => {
+    setError('');
+    setIsAppleLoading(true);
+    try {
+      await appleSignIn();
+    } catch (err: unknown) {
+      const code = (err as {code?: string}).code;
+      if (code === '1001') return; // User cancelled
+      const message =
+        err instanceof Error ? err.message : 'Apple Sign-In failed.';
+      setError(message);
+    } finally {
+      setIsAppleLoading(false);
+    }
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -127,6 +163,41 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
               <ActivityIndicator color={viraTheme.colors.butterMoon} size="small" />
             ) : (
               <Text style={styles.primaryButtonLabel}>CREATE ACCOUNT</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <AppleButton
+            buttonStyle={AppleButton.Style.BLACK}
+            buttonType={AppleButton.Type.SIGN_UP}
+            cornerRadius={viraTheme.radius.lg}
+            style={[
+              styles.appleButton,
+              isAppleLoading && styles.buttonDisabled,
+            ]}
+            onPress={handleAppleSignIn}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.googleButton,
+              isGoogleLoading && styles.buttonDisabled,
+            ]}
+            onPress={handleGoogleSignIn}
+            activeOpacity={0.85}
+            disabled={isGoogleLoading}>
+            {isGoogleLoading ? (
+              <ActivityIndicator
+                color={viraTheme.colors.hemlock}
+                size="small"
+              />
+            ) : (
+              <Text style={styles.googleButtonLabel}>CONTINUE WITH GOOGLE</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -209,6 +280,38 @@ const styles = StyleSheet.create({
   primaryButtonLabel: {
     ...viraTheme.typography.button,
     color: viraTheme.colors.butterMoon,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: viraTheme.spacing.xs,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: viraTheme.colors.border,
+  },
+  dividerText: {
+    ...viraTheme.typography.caption,
+    color: viraTheme.colors.textMuted,
+    marginHorizontal: viraTheme.spacing.md,
+  },
+  appleButton: {
+    height: 54,
+    width: '100%',
+  },
+  googleButton: {
+    paddingVertical: 18,
+    borderRadius: viraTheme.radius.lg,
+    backgroundColor: viraTheme.colors.butterMoon,
+    borderWidth: 1.5,
+    borderColor: viraTheme.colors.hemlock,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleButtonLabel: {
+    ...viraTheme.typography.button,
+    color: viraTheme.colors.hemlock,
   },
   footer: {
     flexDirection: 'row',

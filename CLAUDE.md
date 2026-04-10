@@ -9,9 +9,11 @@ Self-watering plant system companion app. Phase 1 = free plant companion (distri
 - **Zustand** — state management (lightweight, excellent TS support)
 - **Supabase** — backend (Postgres, Auth, Storage, Edge Functions)
 - **react-native-image-picker** — camera + photo library access (1200x1200, quality 0.8)
-- **react-native-ble-plx** — installed, not configured yet (Phase 2)
-- **@notifee/react-native 9.1.8** — installed, native linking FIXED for RN 0.84 New Architecture. Graceful degradation wrapper still in place until confirmed on physical device.
+- **react-native-ble-plx** — installed, not configured yet (Phase 2). BLE scaffold in `src/services/bleService.ts`, `src/types/ble.ts`, `src/store/useBleStore.ts`.
+- **@notifee/react-native 9.1.8** — installed, native linking FIXED for RN 0.84 New Architecture. Degradation wrapper removed — direct static import. Physical device confirmation still pending (Metro blocked by iOS 26).
 - **@react-native-async-storage/async-storage** — installed and working
+- **@react-native-google-signin/google-signin 16.x** — installed and wired. Requires Google OAuth credentials in Supabase Dashboard.
+- **@invertase/react-native-apple-authentication 2.x** — installed and wired. Requires Sign In with Apple Xcode capability + Supabase provider config.
 - **Montserrat** — brand typeface (ExtraBold for H1, Bold for H2/buttons, Regular for body, SemiBold for labels)
 
 ## Build & Run
@@ -33,7 +35,8 @@ src/
 ├── components/        # Reusable UI components
 ├── store/
 │   ├── usePlantStore.ts   # Plant data store, syncs to Supabase
-│   └── useAuthStore.ts    # Auth session state (session, user, isLoading)
+│   ├── useAuthStore.ts    # Auth session state (session, user, isLoading)
+│   └── useBleStore.ts     # BLE connection state (Phase 2 scaffold)
 ├── theme/
 │   └── vira.ts            # Brand colors, typography, spacing
 ├── utils/
@@ -41,16 +44,18 @@ src/
 │   └── careUtils.ts       # getDaysUntilCare, getLastCareDate helpers
 ├── types/
 │   ├── navigation.ts      # ALL navigation types live here
-│   └── plant.ts           # Plant, PlantInput, CareEvent, Reminder, Profile
+│   ├── plant.ts           # Plant, PlantInput, CareEvent, Reminder, Profile
+│   └── ble.ts             # ViraPot, WateringSchedule, BleConnectionState, BleError
 ├── config/
 │   └── env.ts             # Supabase URL + anon key (gitignored)
 └── services/
     ├── supabase.ts              # Singleton Supabase client
-    ├── auth.ts                  # signUp, signIn, signOut, onAuthStateChange
+    ├── auth.ts                  # signUp, signIn, signOut, googleSignIn, appleSignIn, getProfile, onAuthStateChange
     ├── plantService.ts          # Plant CRUD + care events (row ↔ type mappers)
     ├── photoService.ts          # Upload/delete plant photos to Supabase Storage
-    ├── notificationService.ts   # Notifee watering notifications (graceful degradation wrapper)
-    └── aiService.ts             # analyzePlant() — calls analyze-plant Edge Function
+    ├── notificationService.ts   # Notifee watering notifications (direct import)
+    ├── aiService.ts             # analyzePlant() — calls analyze-plant Edge Function
+    └── bleService.ts            # BLE Vira Pot communication (Phase 2 scaffold)
 ```
 
 ## Hard Rules — Never Break These
@@ -98,7 +103,7 @@ Write like a calm, capable friend. Use the plant's nickname. Be warm, grounded, 
 
 Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `notes` (user-editable), `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
 
-## Current State (March 2026)
+## Current State (April 2026)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
@@ -118,23 +123,34 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - Photo upload: `photoService.ts` uploads to `plant-photos/{userId}/{plantId}/{timestamp}.jpg`, returns public URL. AddPlantScreen uploads after creation, PlantDetailScreen uploads on photo change (deletes old remote photo)
 - Navigation gating: no session → Login/SignUp stack; authenticated → main app stack (Home, PlantDetail, AddPlant, Settings). Onboarding shown only if `!hasOnboarded`
 - AI plant analysis: `analyze-plant` Edge Function calls Claude Vision (Sonnet) for species ID + care data. Species cache prevents redundant API calls. Rate limited to 10/user/day. `aiService.ts` client with typed errors. All failure modes (not_a_plant, rate_limited, network error) gracefully handled with manual-entry fallback.
-- Local watering notifications: `src/services/notificationService.ts` — schedules a notification at 9 AM on next watering due date, reschedules on `markWatered`, cancels on `removePlant`. Graceful degradation wrapper means app won't crash if native module is unavailable. `requestPermission()` called once in App.tsx when `hasOnboarded && isAuthenticated`. Simulator confirmed working; physical device pending.
+- Local watering notifications: `src/services/notificationService.ts` — schedules a notification at 9 AM on next watering due date, reschedules on `markWatered`, cancels on `removePlant`. Direct static import (degradation wrapper removed Apr 2026). `requestPermission()` called once in App.tsx when `hasOnboarded && isAuthenticated`. Simulator confirmed working; physical device confirmation pending (Metro blocked by iOS 26).
 - `hasOnboarded` persisted via AsyncStorage (key: `'hasOnboarded'`). Read in App.tsx first `useEffect` before `getSession` to prevent onboarding flash on relaunch. Written in `setHasOnboarded(true)` in usePlantStore.
 - TestFlight: build 1.0 (1) submitted, internal tester sam.morassutti@gmail.com added, auto-distribution enabled for future builds.
 - ViraLeafMark updated to use real brand PNG assets from `assets/images/` — `variant` prop (`'butterMoon' | 'hemlock' | 'luxor' | 'thistle' | 'black' | 'white'`) replaces old `color` prop. react-native-svg still installed but unused — remove when convenient.
 - Brand assets: 8 icon PNGs in `assets/images/VIRA_Icon_*_RGB.png` (source: Vira - Logos/PNG/ICON/). Known issue: PNGs are RGB (no alpha channel) — if icon background is visible at runtime, transparency versions needed from designer.
 - App icon set added to Xcode asset catalog (`ios/ViraPlantsTemp/Images.xcassets/AppIcon.appiconset/`).
+- Metro on physical device: `NSLocalNetworkUsageDescription` + `NSBonjourServices` (`_http._tcp`) added to Info.plist. Rebuild required to test on Ninja Sam.
+- Notifee degradation wrapper removed — direct static import of `@notifee/react-native`. All 3 public functions unchanged. Physical device confirmation still pending (Metro blocked by iOS 26 beta).
+- Google Sign-In: `@react-native-google-signin/google-signin` installed, `googleSignIn()` in `src/services/auth.ts`, "Continue with Google" button on LoginScreen and SignUpScreen. `configureGoogleSignIn()` called in App.tsx on init. `GOOGLE_IOS_CLIENT_ID` in `src/config/env.ts`.
+- Apple Sign-In: `@invertase/react-native-apple-authentication` installed, `appleSignIn()` in `src/services/auth.ts`, Apple branded button on LoginScreen and SignUpScreen. Requires "Sign In with Apple" Xcode capability + Supabase provider config.
+- Settings screen: profile card with display name (OAuth full_name or email prefix), email, member since date, ViraLeafMark avatar placeholder, Vermillion sign-out button. Hemlock background.
+- BLE scaffold: `src/types/ble.ts` (ViraPot, WateringSchedule, BleConnectionState, BleError), `src/services/bleService.ts` (placeholder methods, all throw/log), `src/store/useBleStore.ts` (Zustand store with pots, connectionState, connectedPotId). Not wired to any screen.
+- Fixed duplicate `requestPermission()` useEffect in App.tsx.
 
 **In progress:**
-- Notifications: infrastructure complete, simulator confirmed. Next: confirm native module registers on physical device, then remove graceful degradation wrapper.
-- Metro on Ninja Sam (iPhone physical device): iOS 26 beta blocks Local Network access for dev builds. Workaround: use iPhone 17 Pro simulator for all JS development. Fix: add `NSLocalNetworkUsageDescription` + `_http._tcp` Bonjour service entry to Info.plist.
+- Notifications: Notifee direct import in place. Need to confirm on physical device once Metro connects to Ninja Sam.
+- Metro on Ninja Sam: Info.plist updated. Need to rebuild (`npx react-native run-ios`) and test on device.
+
+**Pending setup (manual steps for Sam):**
+1. Google Sign-In: Enable Google provider in Supabase Dashboard → Authentication → Providers → Google. Create OAuth credentials at console.cloud.google.com for bundle ID `com.viraplants.app`.
+2. Apple Sign-In: Enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple. Add "Sign In with Apple" capability in Xcode → Signing & Capabilities. Create Apple Services ID + secret key in Apple Developer portal.
+3. Test Metro on Ninja Sam after rebuild — check Settings → Privacy & Security → Local Network for ViraPlantsMobileApp.
 
 **Next up (in order):**
-1. Confirm Notifee on physical device; remove degradation wrapper
-2. Fix Metro Local Network access for physical device (Info.plist NSLocalNetworkUsageDescription + Bonjour)
-3. Apple Sign-In + Google Sign-In
-4. Settings screen enhancements
-5. BLE service scaffold (Phase 2 prep)
+1. Confirm Metro + Notifee on Ninja Sam (rebuild required)
+2. Complete Google/Apple OAuth setup (Dashboard + Xcode capability)
+3. Profile editing in Settings
+4. BLE permissions + Phase 2 wiring
 
 ## Implementation Notes
 
@@ -154,12 +170,16 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **DB schema** in `supabase/migrations/001_initial_schema.sql` — apply via SQL Editor. Includes `updated_at` trigger, profile auto-creation trigger, RLS on all tables, Storage bucket + policies. `species_cache` table is read-only for clients (service role writes via Edge Functions). Migration 002 adds `analysis_count`/`analysis_reset_at` to profiles and renames species_cache columns.
 - **aiService.ts** — `analyzePlant({ imageUrl, context })` calls the Edge Function via `supabase.functions.invoke()` (auto-injects auth header). Returns typed `AnalyzeResult`. Throws `AnalysisError` with `.code` for UI error handling.
 - **Edge Function** at `supabase/functions/analyze-plant/index.ts` — Deno runtime, uses Anthropic SDK (`npm:@anthropic-ai/sdk`). Validates response shape before mapping. Retries once on JSON parse failure. Service role client for species_cache writes.
-- **notificationService.ts** — lazy-requires `@notifee/react-native` at runtime (not static import) so a missing native module doesn't crash at startup. All three functions (`requestPermission`, `scheduleWateringNotification`, `cancelWateringNotification`) no-op silently if the module fails to load.
+- **notificationService.ts** — direct static import of `@notifee/react-native` (degradation wrapper removed Apr 2026). Three exported functions: `requestPermission()`, `scheduleWateringNotification(plant)`, `cancelWateringNotification(plantId)`. Notification ID format: `watering-{plantId}`.
 - **markWatered notification reschedule pattern** — construct `updatedPlant` with `{ ...plant, careEvents: [...plant.careEvents, { type: 'water', createdAt: now }] }` and pass that to `scheduleWateringNotification`. Do NOT read from store state after calling `logCareEvent` — the Supabase sync is async and state may not have flushed yet.
 - **AsyncStorage + hasOnboarded** — `setHasOnboarded(true)` writes `AsyncStorage.setItem('hasOnboarded', 'true')`. App.tsx reads it at the top of the first `useEffect` (before `getSession`) and calls `setHasOnboarded(true)` if found. This prevents the onboarding screen from flashing on every relaunch.
 - **Notifee native linking fix (RN 0.84 New Arch)** — root cause was `use_frameworks! :linkage => :static` conflicting with RN 0.84's precompiled `.xcframework` binaries, breaking the Interop Layer that Notifee (a legacy bridge module) depends on. Fix: removed unconditional `use_frameworks!` from Podfile. Also added `UNUserNotificationCenterDelegate` extension to `AppDelegate.swift` so Notifee receives foreground events. `pod 'RNNotifee'` is still declared explicitly inside the target block.
 - **ViraLeafMark** — `src/components/ViraLeafMark.tsx` uses `Image` from react-native backed by PNG assets in `assets/images/`. Props: `variant` (default `'butterMoon'`) and `size` (default `48`). Use `variant="butterMoon"` on Hemlock backgrounds, `variant="hemlock"` on Butter Moon backgrounds.
-- **Metro on physical device (Ninja Sam)** — iOS 26 beta blocks Local Network access for dev builds. Use iPhone 17 Pro simulator for JS development. To fix for physical device: add `NSLocalNetworkUsageDescription` string and `_http._tcp` to `NSBonjourServices` in Info.plist.
+- **Metro on physical device (Ninja Sam)** — iOS 26 beta blocks Local Network access for dev builds. Info.plist now has `NSLocalNetworkUsageDescription` + `NSBonjourServices` with `_http._tcp`. Rebuild required to test.
+- **Google Sign-In** — `configureGoogleSignIn()` called in App.tsx first useEffect (before auth check). `googleSignIn()` in `src/services/auth.ts` calls `GoogleSignin.signIn()` → gets ID token → passes to `supabase.auth.signInWithIdToken({ provider: 'google', token })`. Returns null if user cancels. `GOOGLE_IOS_CLIENT_ID` read from `src/config/env.ts`.
+- **Apple Sign-In** — `appleSignIn()` in `src/services/auth.ts` calls `appleAuth.performRequest()` with EMAIL + FULL_NAME scopes → gets identity token → passes to `supabase.auth.signInWithIdToken({ provider: 'apple', token })`. Error code `1001` = user cancelled (suppressed in UI).
+- **Settings screen** — `getProfile(userId)` in `src/services/auth.ts` fetches `display_name` and `created_at` from `profiles` table. SettingsScreen displays name (OAuth full_name > email prefix), email, member since (formatted via `Intl.DateTimeFormat`). Hemlock background, Butter Moon profile card, Vermillion sign-out CTA.
+- **BLE scaffold** — `src/types/ble.ts` defines `ViraPot`, `WateringSchedule`, `BleConnectionState`, `BleError`. `src/services/bleService.ts` exports singleton with placeholder methods (startScan/stopScan log, others throw). `src/store/useBleStore.ts` is a Zustand store with `pots`, `connectionState`, `connectedPotId`. None of these are wired to any screen or imported anywhere in the app yet.
 
 ## AI Integration Pattern
 

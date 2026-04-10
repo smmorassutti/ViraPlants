@@ -60,5 +60,11 @@
 	<string>Vira needs photo library access so you can select plant photos for identification and care tracking.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Vira uses your local network to connect to Metro bundler during development.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
 </dict>
 </plist>
