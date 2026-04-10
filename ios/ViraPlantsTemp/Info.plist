@@ -58,6 +58,15 @@
 	<string>Vira needs camera access to photograph your plants for identification and care tracking.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Vira needs photo library access so you can select plant photos for identification and care tracking.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.154197413193-j82kcddphtdmqh4ps68tsr4t74faj5qb</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>NSLocalNetworkUsageDescription</key>

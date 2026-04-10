@@ -1,7 +1,6 @@
 import {supabase} from './supabase';
 import type {Session, User, AuthChangeEvent} from '@supabase/supabase-js';
 import {GoogleSignin} from '@react-native-google-signin/google-signin';
-import appleAuth from '@invertase/react-native-apple-authentication';
 import {GOOGLE_IOS_CLIENT_ID} from '../config/env';
 
 export const configureGoogleSignIn = () => {
@@ -22,22 +21,6 @@ export const googleSignIn = async () => {
   const {data, error} = await supabase.auth.signInWithIdToken({
     provider: 'google',
     token: idToken,
-  });
-  if (error) throw error;
-  return data;
-};
-
-export const appleSignIn = async () => {
-  const response = await appleAuth.performRequest({
-    requestedOperation: appleAuth.Operation.LOGIN,
-    requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
-  });
-  if (!response.identityToken) {
-    throw new Error('No identity token returned from Apple Sign-In.');
-  }
-  const {data, error} = await supabase.auth.signInWithIdToken({
-    provider: 'apple',
-    token: response.identityToken,
   });
   if (error) throw error;
   return data;

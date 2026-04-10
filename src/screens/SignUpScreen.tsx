@@ -14,8 +14,7 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import {viraTheme} from '../theme/vira';
 import {ViraLeafMark} from '../components/ViraLeafMark';
-import {signUp, googleSignIn, appleSignIn} from '../services/auth';
-import {AppleButton} from '@invertase/react-native-apple-authentication';
+import {signUp, googleSignIn} from '../services/auth';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -28,7 +27,6 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   const handleSignUp = useCallback(async () => {
     setError('');
@@ -73,22 +71,6 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
       setError(message);
     } finally {
       setIsGoogleLoading(false);
-    }
-  }, []);
-
-  const handleAppleSignIn = useCallback(async () => {
-    setError('');
-    setIsAppleLoading(true);
-    try {
-      await appleSignIn();
-    } catch (err: unknown) {
-      const code = (err as {code?: string}).code;
-      if (code === '1001') return; // User cancelled
-      const message =
-        err instanceof Error ? err.message : 'Apple Sign-In failed.';
-      setError(message);
-    } finally {
-      setIsAppleLoading(false);
     }
   }, []);
 
@@ -171,17 +153,6 @@ export const SignUpScreen: React.FC<Props> = ({navigation}) => {
             <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
-
-          <AppleButton
-            buttonStyle={AppleButton.Style.BLACK}
-            buttonType={AppleButton.Type.SIGN_UP}
-            cornerRadius={viraTheme.radius.lg}
-            style={[
-              styles.appleButton,
-              isAppleLoading && styles.buttonDisabled,
-            ]}
-            onPress={handleAppleSignIn}
-          />
 
           <TouchableOpacity
             style={[
@@ -295,10 +266,6 @@ const styles = StyleSheet.create({
     ...viraTheme.typography.caption,
     color: viraTheme.colors.textMuted,
     marginHorizontal: viraTheme.spacing.md,
-  },
-  appleButton: {
-    height: 54,
-    width: '100%',
   },
   googleButton: {
     paddingVertical: 18,
