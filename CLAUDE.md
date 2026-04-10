@@ -12,8 +12,8 @@ Self-watering plant system companion app. Phase 1 = free plant companion (distri
 - **react-native-ble-plx** — installed, not configured yet (Phase 2). BLE scaffold in `src/services/bleService.ts`, `src/types/ble.ts`, `src/store/useBleStore.ts`.
 - **@notifee/react-native 9.1.8** — installed, native linking FIXED for RN 0.84 New Architecture. Degradation wrapper removed — direct static import. Physical device confirmation still pending (Metro blocked by iOS 26).
 - **@react-native-async-storage/async-storage** — installed and working
-- **@react-native-google-signin/google-signin 16.x** — installed and wired. Requires Google OAuth credentials in Supabase Dashboard.
-- **@invertase/react-native-apple-authentication 2.x** — installed and wired. Requires Sign In with Apple Xcode capability + Supabase provider config.
+- **@react-native-google-signin/google-signin 16.x** — installed, wired, and confirmed working in simulator. OAuth client ID configured in Supabase and URL scheme added to Info.plist.
+- **@invertase/react-native-apple-authentication 2.x** — installed but UI deferred. Required before App Store submission (Apple policy for apps offering third-party sign-in). Will be re-wired pre-submission along with Xcode capability, Supabase provider config, and Apple Services ID.
 - **Montserrat** — brand typeface (ExtraBold for H1, Bold for H2/buttons, Regular for body, SemiBold for labels)
 
 ## Build & Run
@@ -50,7 +50,7 @@ src/
 │   └── env.ts             # Supabase URL + anon key (gitignored)
 └── services/
     ├── supabase.ts              # Singleton Supabase client
-    ├── auth.ts                  # signUp, signIn, signOut, googleSignIn, appleSignIn, getProfile, onAuthStateChange
+    ├── auth.ts                  # signUp, signIn, signOut, googleSignIn, getProfile, onAuthStateChange
     ├── plantService.ts          # Plant CRUD + care events (row ↔ type mappers)
     ├── photoService.ts          # Upload/delete plant photos to Supabase Storage
     ├── notificationService.ts   # Notifee watering notifications (direct import)
@@ -103,7 +103,7 @@ Write like a calm, capable friend. Use the plant's nickname. Be warm, grounded, 
 
 Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `notes` (user-editable), `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
 
-## Current State (April 2026)
+## Current State (April 10, 2026)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
@@ -131,26 +131,27 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - App icon set added to Xcode asset catalog (`ios/ViraPlantsTemp/Images.xcassets/AppIcon.appiconset/`).
 - Metro on physical device: `NSLocalNetworkUsageDescription` + `NSBonjourServices` (`_http._tcp`) added to Info.plist. Rebuild required to test on Ninja Sam.
 - Notifee degradation wrapper removed — direct static import of `@notifee/react-native`. All 3 public functions unchanged. Physical device confirmation still pending (Metro blocked by iOS 26 beta).
-- Google Sign-In: `@react-native-google-signin/google-signin` installed, `googleSignIn()` in `src/services/auth.ts`, "Continue with Google" button on LoginScreen and SignUpScreen. `configureGoogleSignIn()` called in App.tsx on init. `GOOGLE_IOS_CLIENT_ID` in `src/config/env.ts`.
-- Apple Sign-In: `@invertase/react-native-apple-authentication` installed, `appleSignIn()` in `src/services/auth.ts`, Apple branded button on LoginScreen and SignUpScreen. Requires "Sign In with Apple" Xcode capability + Supabase provider config.
-- Settings screen: profile card with display name (OAuth full_name or email prefix), email, member since date, ViraLeafMark avatar placeholder, Vermillion sign-out button. Hemlock background.
-- BLE scaffold: `src/types/ble.ts` (ViraPot, WateringSchedule, BleConnectionState, BleError), `src/services/bleService.ts` (placeholder methods, all throw/log), `src/store/useBleStore.ts` (Zustand store with pots, connectionState, connectedPotId). Not wired to any screen.
+- **Google Sign-In complete:** `@react-native-google-signin/google-signin` installed, `googleSignIn()` in `src/services/auth.ts`, "Continue with Google" button on LoginScreen and SignUpScreen. `configureGoogleSignIn()` called in App.tsx on init. `GOOGLE_IOS_CLIENT_ID` in `src/config/env.ts`. Google OAuth client ID configured in Supabase Dashboard. URL scheme (reversed client ID) added to Info.plist `CFBundleURLTypes`. Confirmed working in simulator (Apr 10, 2026).
+- **Settings screen complete:** Hemlock background, Butter Moon profile card with ViraLeafMark avatar, display name (OAuth full_name or email prefix), email, member since date, Vermillion sign-out CTA.
+- **BLE scaffold complete (placeholder only):** `src/types/ble.ts` (ViraPot, WateringSchedule, BleConnectionState, BleError), `src/services/bleService.ts` (singleton, methods log/throw), `src/store/useBleStore.ts` (Zustand store with pots, connectionState, connectedPotId). Nothing wired to screens — ready for Phase 2 implementation.
 - Fixed duplicate `requestPermission()` useEffect in App.tsx.
 
+**Deferred:**
+- **Apple Sign-In:** `@invertase/react-native-apple-authentication` package remains installed, but all UI (buttons, handlers) and the `appleSignIn()` function were removed on Apr 10, 2026. Apple requires Sign In with Apple for any app offering third-party sign-in (e.g. Google), so this MUST be re-wired before App Store submission. Pre-submission work: re-add `appleSignIn()` in `src/services/auth.ts`, restore `AppleButton` on LoginScreen + SignUpScreen, enable "Sign In with Apple" capability in Xcode → Signing & Capabilities, enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple, create Apple Services ID + secret key in Apple Developer portal. Do not implement until pre-submission.
+
 **In progress:**
-- Notifications: Notifee direct import in place. Need to confirm on physical device once Metro connects to Ninja Sam.
-- Metro on Ninja Sam: Info.plist updated. Need to rebuild (`npx react-native run-ios`) and test on device.
+- **Notifee on physical device:** Degradation wrapper removed, direct static import in place, simulator confirmed working. Physical device confirmation still pending Metro fix on Ninja Sam.
+- **Metro on Ninja Sam:** Info.plist fix applied (`NSLocalNetworkUsageDescription` + `NSBonjourServices` with `_http._tcp`). Rebuild done. Physical device test still pending — check Settings → Privacy & Security → Local Network for ViraPlantsMobileApp after next launch.
 
 **Pending setup (manual steps for Sam):**
-1. Google Sign-In: Enable Google provider in Supabase Dashboard → Authentication → Providers → Google. Create OAuth credentials at console.cloud.google.com for bundle ID `com.viraplants.app`.
-2. Apple Sign-In: Enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple. Add "Sign In with Apple" capability in Xcode → Signing & Capabilities. Create Apple Services ID + secret key in Apple Developer portal.
-3. Test Metro on Ninja Sam after rebuild — check Settings → Privacy & Security → Local Network for ViraPlantsMobileApp.
+1. Apple Sign-In (pre-submission only): Enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple. Add "Sign In with Apple" capability in Xcode → Signing & Capabilities. Create Apple Services ID + secret key in Apple Developer portal. Re-wire UI + `appleSignIn()` in auth.ts.
+2. Confirm Metro + Notifee on Ninja Sam physical device after rebuild.
 
 **Next up (in order):**
-1. Confirm Metro + Notifee on Ninja Sam (rebuild required)
-2. Complete Google/Apple OAuth setup (Dashboard + Xcode capability)
-3. Profile editing in Settings
-4. BLE permissions + Phase 2 wiring
+1. Confirm Metro + Notifee on Ninja Sam physical device
+2. Profile editing in Settings
+3. BLE permissions + Phase 2 wiring
+4. Pre-submission: re-wire Apple Sign-In
 
 ## Implementation Notes
 
@@ -176,8 +177,8 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Notifee native linking fix (RN 0.84 New Arch)** — root cause was `use_frameworks! :linkage => :static` conflicting with RN 0.84's precompiled `.xcframework` binaries, breaking the Interop Layer that Notifee (a legacy bridge module) depends on. Fix: removed unconditional `use_frameworks!` from Podfile. Also added `UNUserNotificationCenterDelegate` extension to `AppDelegate.swift` so Notifee receives foreground events. `pod 'RNNotifee'` is still declared explicitly inside the target block.
 - **ViraLeafMark** — `src/components/ViraLeafMark.tsx` uses `Image` from react-native backed by PNG assets in `assets/images/`. Props: `variant` (default `'butterMoon'`) and `size` (default `48`). Use `variant="butterMoon"` on Hemlock backgrounds, `variant="hemlock"` on Butter Moon backgrounds.
 - **Metro on physical device (Ninja Sam)** — iOS 26 beta blocks Local Network access for dev builds. Info.plist now has `NSLocalNetworkUsageDescription` + `NSBonjourServices` with `_http._tcp`. Rebuild required to test.
-- **Google Sign-In** — `configureGoogleSignIn()` called in App.tsx first useEffect (before auth check). `googleSignIn()` in `src/services/auth.ts` calls `GoogleSignin.signIn()` → gets ID token → passes to `supabase.auth.signInWithIdToken({ provider: 'google', token })`. Returns null if user cancels. `GOOGLE_IOS_CLIENT_ID` read from `src/config/env.ts`.
-- **Apple Sign-In** — `appleSignIn()` in `src/services/auth.ts` calls `appleAuth.performRequest()` with EMAIL + FULL_NAME scopes → gets identity token → passes to `supabase.auth.signInWithIdToken({ provider: 'apple', token })`. Error code `1001` = user cancelled (suppressed in UI).
+- **Google Sign-In** — `configureGoogleSignIn()` called in App.tsx first useEffect (before auth check). `googleSignIn()` in `src/services/auth.ts` calls `GoogleSignin.signIn()` → gets ID token → passes to `supabase.auth.signInWithIdToken({ provider: 'google', token })`. Returns null if user cancels. `GOOGLE_IOS_CLIENT_ID` read from `src/config/env.ts`. URL scheme (reversed client ID, e.g. `com.googleusercontent.apps.<id>`) must be in Info.plist `CFBundleURLTypes` for OAuth redirect to return to the app.
+- **Apple Sign-In (deferred)** — Package `@invertase/react-native-apple-authentication` is still installed but UI was removed Apr 10, 2026 because Apple only enforces third-party sign-in parity at App Store review. Pre-submission: re-add `appleSignIn()` calling `appleAuth.performRequest()` with EMAIL + FULL_NAME scopes, pass identity token to `supabase.auth.signInWithIdToken({ provider: 'apple', token })`. Error code `1001` = user cancelled (suppress in UI).
 - **Settings screen** — `getProfile(userId)` in `src/services/auth.ts` fetches `display_name` and `created_at` from `profiles` table. SettingsScreen displays name (OAuth full_name > email prefix), email, member since (formatted via `Intl.DateTimeFormat`). Hemlock background, Butter Moon profile card, Vermillion sign-out CTA.
 - **BLE scaffold** — `src/types/ble.ts` defines `ViraPot`, `WateringSchedule`, `BleConnectionState`, `BleError`. `src/services/bleService.ts` exports singleton with placeholder methods (startScan/stopScan log, others throw). `src/store/useBleStore.ts` is a Zustand store with `pots`, `connectionState`, `connectedPotId`. None of these are wired to any screen or imported anywhere in the app yet.
 
