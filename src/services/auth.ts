@@ -59,6 +59,17 @@ export const onAuthStateChange = (
   return data.subscription;
 };
 
+export const updateProfile = async (
+  userId: string,
+  updates: {displayName: string},
+): Promise<void> => {
+  const {error} = await supabase
+    .from('profiles')
+    .update({display_name: updates.displayName})
+    .eq('id', userId);
+  if (error) throw error;
+};
+
 export const getProfile = async (userId: string) => {
   const {data, error} = await supabase
     .from('profiles')

@@ -1,5 +1,5 @@
 import type {RootStackParamList} from '../types/navigation';
-import React, {useState, useCallback, useMemo} from 'react';
+import React, {useState, useCallback, useMemo, useLayoutEffect} from 'react';
 import {
   View,
   Text,
@@ -147,6 +147,26 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
     navigation.navigate('AddPlant');
   }, [navigation]);
 
+  const navigateToSettings = useCallback(() => {
+    navigation.navigate('Settings');
+  }, [navigation]);
+
+  // Header-right settings gear
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={navigateToSettings}
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+          style={styles.headerIconButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings">
+          <Text style={styles.headerIcon}>{'\u2699'}</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, navigateToSettings]);
+
   // ── List Header (care tasks + toggle) ──
 
   const ListHeader = useCallback(() => {
@@ -236,6 +256,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: viraTheme.colors.background,
+  },
+  headerIconButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIcon: {
+    fontSize: 22,
+    color: viraTheme.colors.hemlock,
   },
   listContent: {
     paddingBottom: 100,
