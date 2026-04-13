@@ -1,10 +1,18 @@
 import type {RootStackParamList} from '../types/navigation';
 import React, {useState, useCallback, useEffect} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator} from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
 import {useAuthStore} from '../store/useAuthStore';
-import {signOut, getProfile} from '../services/auth';
+import {signOut, getProfile, updateProfile} from '../services/auth';
 import {ViraLeafMark} from '../components/ViraLeafMark';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -15,6 +23,11 @@ export const SettingsScreen: React.FC<Props> = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [memberSince, setMemberSince] = useState<string | null>(null);
+
+  // Edit state for display name
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -66,6 +79,38 @@ export const SettingsScreen: React.FC<Props> = () => {
     ]);
   }, []);
 
+  const handleStartEditName = useCallback(() => {
+    setEditName(displayName || '');
+    setIsEditingName(true);
+  }, [displayName]);
+
+  const handleCancelEditName = useCallback(() => {
+    setIsEditingName(false);
+    setEditName('');
+  }, []);
+
+  const handleSaveName = useCallback(async () => {
+    if (!user) return;
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      Alert.alert('Name required', 'Please enter a display name.');
+      return;
+    }
+    setIsSavingName(true);
+    try {
+      await updateProfile(user.id, {displayName: trimmed});
+      setDisplayName(trimmed);
+      setIsEditingName(false);
+    } catch {
+      Alert.alert(
+        "Couldn't save your name",
+        'Please try again.',
+      );
+    } finally {
+      setIsSavingName(false);
+    }
+  }, [user, editName]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -83,9 +128,65 @@ export const SettingsScreen: React.FC<Props> = () => {
             <ViraLeafMark size={40} variant="hemlock" />
           </View>
 
-          {displayName ? (
-            <Text style={styles.displayName}>{displayName}</Text>
-          ) : null}
+          {isEditingName ? (
+            <View style={styles.nameEditContainer}>
+              <TextInput
+                style={styles.nameInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Your name"
+                placeholderTextColor={viraTheme.colors.textMuted}
+                maxLength={50}
+                autoFocus
+                autoCapitalize="words"
+                returnKeyType="done"
+                onSubmitEditing={handleSaveName}
+                accessibilityLabel="Display name"
+              />
+              <View style={styles.nameEditActions}>
+                <TouchableOpacity
+                  onPress={handleCancelEditName}
+                  disabled={isSavingName}
+                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel editing name">
+                  <Text style={styles.nameCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSaveName}
+                  disabled={isSavingName}
+                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save display name">
+                  {isSavingName ? (
+                    <ActivityIndicator
+                      color={viraTheme.colors.vermillion}
+                      size="small"
+                    />
+                  ) : (
+                    <Text style={styles.nameSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.nameRow}>
+              {displayName ? (
+                <Text style={styles.displayName}>{displayName}</Text>
+              ) : (
+                <Text style={[styles.displayName, styles.displayNameEmpty]}>
+                  Add your name
+                </Text>
+              )}
+              <TouchableOpacity
+                onPress={handleStartEditName}
+                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                accessibilityRole="button"
+                accessibilityLabel="Edit display name">
+                <Text style={styles.editNameLabel}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {user?.email ? (
             <Text style={styles.email}>{user.email}</Text>
@@ -103,7 +204,9 @@ export const SettingsScreen: React.FC<Props> = () => {
         style={[styles.signOutButton, isSigningOut && styles.buttonDisabled]}
         onPress={handleSignOut}
         activeOpacity={0.7}
-        disabled={isSigningOut}>
+        disabled={isSigningOut}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out">
         <Text style={styles.signOutText}>
           {isSigningOut ? 'Signing out...' : 'SIGN OUT'}
         </Text>
@@ -151,11 +254,56 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: viraTheme.spacing.lg,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: viraTheme.spacing.sm,
+    marginBottom: viraTheme.spacing.xs,
+  },
   displayName: {
     ...viraTheme.typography.heading2,
     color: viraTheme.colors.lagoon,
-    marginBottom: viraTheme.spacing.xs,
     textAlign: 'center',
+  },
+  displayNameEmpty: {
+    color: viraTheme.colors.textMuted,
+    fontStyle: 'italic',
+  },
+  editNameLabel: {
+    ...viraTheme.typography.caption,
+    fontFamily: 'Montserrat-Bold',
+    fontWeight: '700',
+    color: viraTheme.colors.luxor,
+  },
+  nameEditContainer: {
+    width: '100%',
+    marginBottom: viraTheme.spacing.sm,
+  },
+  nameInput: {
+    ...viraTheme.typography.heading2,
+    color: viraTheme.colors.lagoon,
+    textAlign: 'center',
+    borderBottomWidth: 1.5,
+    borderBottomColor: viraTheme.colors.thistle,
+    paddingVertical: viraTheme.spacing.xs,
+    minHeight: 44,
+  },
+  nameEditActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: viraTheme.spacing.xl,
+    marginTop: viraTheme.spacing.sm,
+  },
+  nameCancelText: {
+    ...viraTheme.typography.button,
+    color: viraTheme.colors.hemlock,
+    fontSize: 13,
+  },
+  nameSaveText: {
+    ...viraTheme.typography.button,
+    color: viraTheme.colors.vermillion,
+    fontSize: 13,
   },
   email: {
     ...viraTheme.typography.body,
@@ -176,6 +324,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     paddingHorizontal: viraTheme.spacing.xxxl,
+    minHeight: 48,
   },
   buttonDisabled: {
     opacity: 0.6,

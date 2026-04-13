@@ -103,7 +103,7 @@ Write like a calm, capable friend. Use the plant's nickname. Be warm, grounded, 
 
 Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `notes` (user-editable), `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
 
-## Current State (April 10, 2026)
+## Current State (April 11, 2026)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
@@ -135,6 +135,9 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Settings screen complete:** Hemlock background, Butter Moon profile card with ViraLeafMark avatar, display name (OAuth full_name or email prefix), email, member since date, Vermillion sign-out CTA.
 - **BLE scaffold complete (placeholder only):** `src/types/ble.ts` (ViraPot, WateringSchedule, BleConnectionState, BleError), `src/services/bleService.ts` (singleton, methods log/throw), `src/store/useBleStore.ts` (Zustand store with pots, connectionState, connectedPotId). Nothing wired to screens — ready for Phase 2 implementation.
 - Fixed duplicate `requestPermission()` useEffect in App.tsx.
+- **Edit Plant complete (Apr 11, 2026):** PlantDetailScreen now has an edit mode triggered from the header-right "Edit" button. Users can change nickname, location, and pot size inline, stage a new photo without uploading, and optionally tap "Re-identify plant" to run a fresh Claude Vision analysis. Save only uploads/updates changed fields, deletes the old remote photo, and reschedules the watering notification when `waterFrequencyDays` changes. Cancel cleans up any re-identify upload. `KeyboardAvoidingView` added. No new navigation route.
+- **Profile editing in Settings complete (Apr 11, 2026):** Display name is now editable via an inline "Edit" link on SettingsScreen. Tapping shows a TextInput (maxLength 50) with Save/Cancel. New `updateProfile(userId, {displayName})` in `src/services/auth.ts` writes to `profiles.display_name`. Email and member-since remain read-only.
+- **Drift cleanup (Apr 11, 2026):** Fixed one hardcoded `'#FFFFFF'` in `OnboardingScreen.tsx` (now `colors.white`) and one unselectored `usePlantStore()` destructure (now targeted selectors). Audits pass cleanly.
 
 **Deferred:**
 - **Apple Sign-In:** `@invertase/react-native-apple-authentication` package remains installed, but all UI (buttons, handlers) and the `appleSignIn()` function were removed on Apr 10, 2026. Apple requires Sign In with Apple for any app offering third-party sign-in (e.g. Google), so this MUST be re-wired before App Store submission. Pre-submission work: re-add `appleSignIn()` in `src/services/auth.ts`, restore `AppleButton` on LoginScreen + SignUpScreen, enable "Sign In with Apple" capability in Xcode → Signing & Capabilities, enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple, create Apple Services ID + secret key in Apple Developer portal. Do not implement until pre-submission.
@@ -148,10 +151,12 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 2. Confirm Metro + Notifee on Ninja Sam physical device after rebuild.
 
 **Next up (in order):**
-1. Confirm Metro + Notifee on Ninja Sam physical device
-2. Profile editing in Settings
-3. BLE permissions + Phase 2 wiring
-4. Pre-submission: re-wire Apple Sign-In
+1. Manual smoke test: Edit Plant + Profile Editing on iPhone 17 Pro simulator
+2. Confirm Metro + Notifee on Ninja Sam physical device
+3. TestFlight build 2 (ships Edit Plant + Profile Editing)
+4. Confirm Notifee on physical device via TestFlight
+5. BLE permissions + Phase 2 wiring
+6. Pre-submission: re-wire Apple Sign-In
 
 ## Implementation Notes
 
@@ -181,6 +186,9 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Apple Sign-In (deferred)** — Package `@invertase/react-native-apple-authentication` is still installed but UI was removed Apr 10, 2026 because Apple only enforces third-party sign-in parity at App Store review. Pre-submission: re-add `appleSignIn()` calling `appleAuth.performRequest()` with EMAIL + FULL_NAME scopes, pass identity token to `supabase.auth.signInWithIdToken({ provider: 'apple', token })`. Error code `1001` = user cancelled (suppress in UI).
 - **Settings screen** — `getProfile(userId)` in `src/services/auth.ts` fetches `display_name` and `created_at` from `profiles` table. SettingsScreen displays name (OAuth full_name > email prefix), email, member since (formatted via `Intl.DateTimeFormat`). Hemlock background, Butter Moon profile card, Vermillion sign-out CTA.
 - **BLE scaffold** — `src/types/ble.ts` defines `ViraPot`, `WateringSchedule`, `BleConnectionState`, `BleError`. `src/services/bleService.ts` exports singleton with placeholder methods (startScan/stopScan log, others throw). `src/store/useBleStore.ts` is a Zustand store with `pots`, `connectionState`, `connectedPotId`. None of these are wired to any screen or imported anywhere in the app yet.
+- **Edit Plant pattern** — `PlantDetailScreen` is a single screen with `isEditing` state. Header-right Edit button is wired via `useLayoutEffect` + `navigation.setOptions`. Edit mode swaps the read-only view for TextInputs (nickname in hero, location + pot size chips below), adds a "Re-identify plant" button, and Save/Cancel at the bottom. Photo picks in edit mode store a `pendingPhotoUri` locally — they are only uploaded on Save (or on Re-identify, which needs a Storage URL for the Edge Function). `pendingUploadedUrl` tracks any upload made for re-identify so that (a) Save doesn't re-upload and (b) Cancel can delete the orphaned upload. AI results from Re-identify are stored in `aiOverrides` and merged into the update payload on Save. The watering notification is rescheduled when `waterFrequencyDays` changes (construct `updatedPlant = { ...plant, ...updates }` and call `cancelWateringNotification` then `scheduleWateringNotification`).
+- **`updatePlant` store action** — Already accepts `Partial<Plant>` and `plantService.updatePlantRemote` already maps each field conditionally, so partial updates send only changed columns to Supabase. No store changes were needed for Edit Plant.
+- **Profile editing** — `updateProfile(userId, {displayName})` in `src/services/auth.ts` writes to `profiles.display_name`. SettingsScreen manages edit state locally (no store caching of profile data) — after save, it just updates the local `displayName` string. Email change is out of scope (requires Supabase Auth email flow).
 
 ## AI Integration Pattern
 

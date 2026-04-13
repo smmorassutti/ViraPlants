@@ -119,7 +119,8 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   const [notifs, setNotifs] = useState(true);
   const [camera, setCamera] = useState(true);
 
-  const { setProfile, setHasOnboarded } = usePlantStore();
+  const setProfile = usePlantStore(s => s.setProfile);
+  const setHasOnboarded = usePlantStore(s => s.setHasOnboarded);
 
   const completeOnboarding = (goToAddPlant: boolean) => {
     // Save profile with default location
@@ -587,7 +588,7 @@ const s = StyleSheet.create({
   },
   primaryButtonLabel: {
     ...typography.button,
-    color: '#FFFFFF',
+    color: colors.white,
   },
   skipLabel: {
     ...typography.body,
