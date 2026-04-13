@@ -154,9 +154,10 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 1. Manual smoke test: Edit Plant + Profile Editing on iPhone 17 Pro simulator
 2. Confirm Metro + Notifee on Ninja Sam physical device
 3. TestFlight build 2 (ships Edit Plant + Profile Editing)
-4. Confirm Notifee on physical device via TestFlight
-5. BLE permissions + Phase 2 wiring
-6. Pre-submission: re-wire Apple Sign-In
+4. Plant sharing / caretaker mode — Invite by email, caretaker can view plants and mark watered/fertilized but can't edit or delete. Needs: `shared_access` DB table + migration, RLS updates on `plants` and `care_events`, invite Edge Function, app UI (invite flow, incoming invitations screen, "Caring for" section on HomeScreen, read-only gating for caretakers), revoke access from owner side. Multi-session feature — plan in conversation first.
+5. Confirm Notifee on physical device via TestFlight
+6. BLE permissions + Phase 2 wiring
+7. Pre-submission: re-wire Apple Sign-In
 
 ## Implementation Notes
 
