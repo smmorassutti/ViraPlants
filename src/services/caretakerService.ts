@@ -77,7 +77,7 @@ type CaretakerRow = {
   owner_id: string;
   caretaker_id: string;
   expires_at: string | null;
-  created_at: string;
+  invited_at: string;
 };
 
 type ProfileRow = {
@@ -197,9 +197,9 @@ export async function listMyCaretakers(): Promise<GardenCaretaker[]> {
 
   const {data: caretakerRows, error} = await supabase
     .from('garden_caretakers')
-    .select('id, owner_id, caretaker_id, expires_at, created_at')
+    .select('id, owner_id, caretaker_id, expires_at, invited_at')
     .eq('owner_id', user.id)
-    .order('created_at', {ascending: false});
+    .order('invited_at', {ascending: false});
 
   if (error) throw new CaretakerError('query_failed', error.message);
   const rows = (caretakerRows as CaretakerRow[] | null) ?? [];
@@ -228,7 +228,7 @@ export async function listMyCaretakers(): Promise<GardenCaretaker[]> {
       email: null, // auth.users email is not exposed via PostgREST to regular users
       avatarUrl: profile?.avatar_url ?? null,
       expiresAt: row.expires_at,
-      createdAt: row.created_at,
+      createdAt: row.invited_at,
     };
   });
 }
