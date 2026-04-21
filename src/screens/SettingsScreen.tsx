@@ -17,7 +17,7 @@ import {ViraLeafMark} from '../components/ViraLeafMark';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-export const SettingsScreen: React.FC<Props> = () => {
+export const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const user = useAuthStore(s => s.user);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -201,6 +201,21 @@ export const SettingsScreen: React.FC<Props> = () => {
       )}
 
       <TouchableOpacity
+        style={styles.navRow}
+        onPress={() => navigation.navigate('ManageCaretakers')}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Manage caretakers">
+        <View style={styles.navRowLabelContainer}>
+          <Text style={styles.navRowLabel}>Caretakers</Text>
+          <Text style={styles.navRowHelp}>
+            Invite someone to help care for your plants
+          </Text>
+        </View>
+        <Text style={styles.navRowChevron}>{'›'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={[styles.signOutButton, isSigningOut && styles.buttonDisabled]}
         onPress={handleSignOut}
         activeOpacity={0.7}
@@ -315,6 +330,35 @@ const styles = StyleSheet.create({
     ...viraTheme.typography.caption,
     color: viraTheme.colors.textMuted,
     textAlign: 'center',
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: viraTheme.colors.butterMoon,
+    borderRadius: viraTheme.radius.lg,
+    paddingVertical: viraTheme.spacing.lg,
+    paddingHorizontal: viraTheme.spacing.lg,
+    marginBottom: viraTheme.spacing.lg,
+    minHeight: 48,
+  },
+  navRowLabelContainer: {
+    flex: 1,
+    paddingRight: viraTheme.spacing.md,
+  },
+  navRowLabel: {
+    ...viraTheme.typography.body,
+    fontFamily: 'Montserrat-SemiBold',
+    color: viraTheme.colors.lagoon,
+    marginBottom: 2,
+  },
+  navRowHelp: {
+    ...viraTheme.typography.caption,
+    color: viraTheme.colors.textMuted,
+  },
+  navRowChevron: {
+    fontSize: 28,
+    color: viraTheme.colors.hemlock,
   },
   signOutButton: {
     paddingVertical: viraTheme.spacing.lg,
