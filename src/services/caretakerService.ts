@@ -186,20 +186,32 @@ export async function inviteCaretaker(
 
 /**
  * List pending (unaccepted) invites owned by the caller.
+ *
+ * Implementation note: the SELECT policy on `garden_invites` references
+ * `auth.users`, which neither the anon nor authenticated role can read — see
+ * `questions.md` Q1. Until that RLS policy is fixed, we route through the
+ * `caretaker-invites` Edge Function, which uses the service-role client and
+ * bypasses RLS.
  */
 export async function listMyInvites(): Promise<GardenInvite[]> {
-  const {data: {user}} = await supabase.auth.getUser();
-  if (!user) throw new CaretakerError('unauthorized', 'You need to be signed in.');
+  const {data, error} = await supabase.functions.invoke('caretaker-invites', {
+    body: {action: 'list'},
+  });
 
-  const {data, error} = await supabase
-    .from('garden_invites')
-    .select('id, owner_id, invitee_email, invite_expires_at, expires_at, accepted_at, created_at')
-    .eq('owner_id', user.id)
-    .is('accepted_at', null)
-    .order('created_at', {ascending: false});
+  if (error) {
+    const {code, message} = await extractFunctionError(error);
+    throw new CaretakerError(code, message);
+  }
 
-  if (error) throw new CaretakerError('query_failed', error.message);
-  return (data as InviteRow[] | null ?? []).map(rowToInvite);
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !Array.isArray((data as {invites?: unknown}).invites)
+  ) {
+    throw new CaretakerError('invalid_response', 'Could not load your invites.');
+  }
+
+  return ((data as {invites: InviteRow[]}).invites).map(rowToInvite);
 }
 
 /**
@@ -248,11 +260,22 @@ export async function listMyCaretakers(): Promise<GardenCaretaker[]> {
 }
 
 /**
- * Cancel a pending invite. Relies on RLS policy `owner_or_invitee_can_delete`.
+ * Cancel a pending invite.
+ *
+ * Implementation note: same RLS caveat as `listMyInvites` — the policy on
+ * `garden_invites` blocks authenticated-role DELETE with a "permission denied
+ * for table users" error. Routes through the `caretaker-invites` Edge Function
+ * (service role), which re-checks ownership from the JWT `sub` claim.
  */
 export async function cancelInvite(inviteId: string): Promise<void> {
-  const {error} = await supabase.from('garden_invites').delete().eq('id', inviteId);
-  if (error) throw new CaretakerError('delete_failed', error.message);
+  const {error} = await supabase.functions.invoke('caretaker-invites', {
+    body: {action: 'cancel', inviteId},
+  });
+
+  if (error) {
+    const {code, message} = await extractFunctionError(error);
+    throw new CaretakerError(code, message);
+  }
 }
 
 /**
