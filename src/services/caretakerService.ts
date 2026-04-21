@@ -129,6 +129,20 @@ async function extractFunctionError(
                   : 'Something went wrong. Please try again.',
             };
           }
+          // Supabase platform error shape: { code, message } flat at the top
+          // level (e.g. UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM when a
+          // function is deployed without --no-verify-jwt).
+          const topCode = (body as {code?: unknown}).code;
+          if (typeof topCode === 'string') {
+            const topMessage = (body as {message?: unknown}).message;
+            return {
+              code: topCode,
+              message:
+                typeof topMessage === 'string' && topMessage.length > 0
+                  ? topMessage
+                  : 'Something went wrong. Please try again.',
+            };
+          }
         }
       } catch {
         // fall through
