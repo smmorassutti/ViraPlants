@@ -103,7 +103,7 @@ Write like a calm, capable friend. Use the plant's nickname. Be warm, grounded, 
 
 Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude), `location`, `orientation`, `potSize`, `photoUrl`, `health`, `careNotes`, `notes` (user-editable), `waterFrequencyDays`, `fertilizeFrequencyDays`, `connectionType` ("manual" | "vira_pot"), `viraPotId` (null until paired), `careEvents[]`, `reminders[]`.
 
-## Current State (April 11, 2026)
+## Current State (April 21, 2026)
 
 **Done:**
 - Onboarding flow (4 screens) — Welcome, Features, Quick Setup, Add First Plant
@@ -138,6 +138,14 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Edit Plant complete (Apr 11, 2026):** PlantDetailScreen now has an edit mode triggered from the header-right "Edit" button. Users can change nickname, location, and pot size inline, stage a new photo without uploading, and optionally tap "Re-identify plant" to run a fresh Claude Vision analysis. Save only uploads/updates changed fields, deletes the old remote photo, and reschedules the watering notification when `waterFrequencyDays` changes. Cancel cleans up any re-identify upload. `KeyboardAvoidingView` added. No new navigation route.
 - **Profile editing in Settings complete (Apr 11, 2026):** Display name is now editable via an inline "Edit" link on SettingsScreen. Tapping shows a TextInput (maxLength 50) with Save/Cancel. New `updateProfile(userId, {displayName})` in `src/services/auth.ts` writes to `profiles.display_name`. Email and member-since remain read-only.
 - **Drift cleanup (Apr 11, 2026):** Fixed one hardcoded `'#FFFFFF'` in `OnboardingScreen.tsx` (now `colors.white`) and one unselectored `usePlantStore()` destructure (now targeted selectors). Audits pass cleanly.
+- **Caretaker mode Phase 0 + 1 (pre-Apr 21, 2026):** Resend account set up with verified domain `viraplants.com` (SPF/DKIM/MX/DMARC). `RESEND_API_KEY` stored as Supabase Edge Function secret. Shared helper `supabase/functions/_shared/sendEmail.ts` (REST-only, no SDK) calls Resend with from-address `Vira <hello@viraplants.com>`. Schema migration 003 applied remotely: `garden_caretakers`, `garden_invites`, `caretaker_notes` tables + RLS + `has_garden_access(uuid)` SECURITY DEFINER helper. Live RLS behavioral test deferred to Phase 4. Migration SQL lives in Supabase Dashboard, not yet checked into the local `supabase/migrations/` tree.
+- **Caretaker mode Phase 2 complete (Apr 21, 2026):** Owner-side invite flow.
+  - Edge Function `supabase/functions/invite-caretaker/index.ts` — decodes JWT (gateway validates signature), validates email + optional caretaker expiry, guards against self-invite / already-invited / already-caretaker, generates a base64url token, inserts into `garden_invites` via service role, sends the branded HTML email via `sendEmail` helper, rolls back the invite row if email send fails. Returns `{ success: true, inviteId }` or `{ error: { code, message } }` with codes: `invalid_email`, `already_invited`, `already_caretaker`, `self_invite`, `email_send_failed`, `unauthorized`, `invalid_expiry`, `bad_request`, `internal`.
+  - Client service `src/services/caretakerService.ts` — typed wrapper exporting `inviteCaretaker`, `listMyInvites`, `listMyCaretakers`, `cancelInvite`, `revokeCaretaker`, `updateCaretakerExpiry` for Phase 2. Stubs for Phase 3+ (`listGardensImCaretaking`, `listPendingInvitesForMe`, `acceptInvite`, `declineInvite`) throw `CaretakerError('not_implemented', …)`. `CaretakerError` exposes a typed `.code`. Error body parsing uses `FunctionsHttpError.context` (a `Response`) and reads the nested `{ error: { code, message } }` shape the Edge Function returns.
+  - Screens — `ManageCaretakersScreen` (Hemlock background; two sections "People caring for your garden" and "Pending invites" with Butter Moon cards, remove/cancel/resend actions, pull-to-refresh, calm empty states, bottom Vermillion "Invite a caretaker" CTA). `InviteCaretakerScreen` (modal presentation; autofocused email input, optional expiry switch with +/− stepper and a tomorrow-minimum guard, Cancel/Send row, inline error messages mapped from Edge Function error codes exactly per the Phase 2 plan).
+  - Navigation — added `ManageCaretakers` and `InviteCaretaker` to `RootStackParamList`; both registered in `App.tsx` (the latter with `presentation: 'modal'`).
+  - Settings — new **Caretakers** nav row in `SettingsScreen` ("Invite someone to help care for your plants") deep-links to `ManageCaretakers`.
+  - Verification — `npx tsc --noEmit` zero errors; hardcoded-hex scan, unselectored-store scan, and `any`/`@ts-ignore` scans all pass on new code; iPhone 17 Pro simulator build + launch succeeded; Edge Function deployed to project `yxidmviucaaztdnkxxvw`. Full test record in `test-results/phase-2-test.md` — interactive tap-through flow A–I is the remaining human reviewer step.
 
 **Deferred:**
 - **Apple Sign-In:** `@invertase/react-native-apple-authentication` package remains installed, but all UI (buttons, handlers) and the `appleSignIn()` function were removed on Apr 10, 2026. Apple requires Sign In with Apple for any app offering third-party sign-in (e.g. Google), so this MUST be re-wired before App Store submission. Pre-submission work: re-add `appleSignIn()` in `src/services/auth.ts`, restore `AppleButton` on LoginScreen + SignUpScreen, enable "Sign In with Apple" capability in Xcode → Signing & Capabilities, enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple, create Apple Services ID + secret key in Apple Developer portal. Do not implement until pre-submission.
@@ -151,13 +159,15 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 2. Confirm Metro + Notifee on Ninja Sam physical device after rebuild.
 
 **Next up (in order):**
-1. Manual smoke test: Edit Plant + Profile Editing on iPhone 17 Pro simulator
-2. Confirm Metro + Notifee on Ninja Sam physical device
-3. TestFlight build 2 (ships Edit Plant + Profile Editing)
-4. Plant sharing / caretaker mode — Invite by email, caretaker can view plants and mark watered/fertilized but can't edit or delete. Needs: `shared_access` DB table + migration, RLS updates on `plants` and `care_events`, invite Edge Function, app UI (invite flow, incoming invitations screen, "Caring for" section on HomeScreen, read-only gating for caretakers), revoke access from owner side. Multi-session feature — plan in conversation first.
-5. Confirm Notifee on physical device via TestFlight
-6. BLE permissions + Phase 2 wiring
-7. Pre-submission: re-wire Apple Sign-In
+1. Human interactive smoke test of caretaker Phase 2 on iPhone 17 Pro simulator — follow `test-results/phase-2-test.md` steps A–I (Settings → Caretakers nav, empty states, invite happy path + email delivery, cancel, self-invite error, duplicate error, optional expiry, VoiceOver, 44×44pt targets).
+2. Caretaker mode Phase 3 — invite acceptance (caretaker side). New `accept-invite` Edge Function (transactional `garden_caretakers` insert + `garden_invites.accepted_at` update), "Pending invitations" section at top of SettingsScreen with PendingInviteCard, `listPendingInvitesForMe` / `acceptInvite` / `declineInvite` implementations. Decline is a plain DELETE via `owner_or_invitee_can_delete` RLS. Error codes: `invite_not_found`, `invite_already_accepted`, `invite_expired`, `email_mismatch`, `already_caretaker`.
+3. Caretaker mode Phase 4 — `useGardenStore` (activeGardenId persisted to AsyncStorage, filters expired caretaking gardens), refactor `usePlantStore.loadPlants()` to be garden-scoped, Home header dropdown + GardenPickerBottomSheet, caretaker write-gating on HomeScreen (hide + FAB) and PlantDetailScreen (hide Edit/Remove, keep Mark Watered/Fertilized, lock owner notes). First live RLS test.
+4. Caretaker mode Phase 5 — caretaker notes. New `caretakerNotesService.ts` (listNotes/addNote/deleteNote), Caretaker Notes section on PlantDetailScreen with avatar + author + relative timestamp and RLS author-only delete.
+5. Caretaker mode Phase 6 — TestFlight build 6 ships caretaker mode. Follow Apr 16 checklist (bump to 6, clean archive to `/tmp/ViraPlantsTemp6.xcarchive`, upload, e2e test with a second Apple ID).
+6. Confirm Metro + Notifee on Ninja Sam physical device.
+7. Confirm Notifee on physical device via TestFlight.
+8. BLE permissions + Phase 2 (Vira pot) wiring.
+9. Pre-submission: re-wire Apple Sign-In.
 
 ## Implementation Notes
 
@@ -190,6 +200,11 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 - **Edit Plant pattern** — `PlantDetailScreen` is a single screen with `isEditing` state. Header-right Edit button is wired via `useLayoutEffect` + `navigation.setOptions`. Edit mode swaps the read-only view for TextInputs (nickname in hero, location + pot size chips below), adds a "Re-identify plant" button, and Save/Cancel at the bottom. Photo picks in edit mode store a `pendingPhotoUri` locally — they are only uploaded on Save (or on Re-identify, which needs a Storage URL for the Edge Function). `pendingUploadedUrl` tracks any upload made for re-identify so that (a) Save doesn't re-upload and (b) Cancel can delete the orphaned upload. AI results from Re-identify are stored in `aiOverrides` and merged into the update payload on Save. The watering notification is rescheduled when `waterFrequencyDays` changes (construct `updatedPlant = { ...plant, ...updates }` and call `cancelWateringNotification` then `scheduleWateringNotification`).
 - **`updatePlant` store action** — Already accepts `Partial<Plant>` and `plantService.updatePlantRemote` already maps each field conditionally, so partial updates send only changed columns to Supabase. No store changes were needed for Edit Plant.
 - **Profile editing** — `updateProfile(userId, {displayName})` in `src/services/auth.ts` writes to `profiles.display_name`. SettingsScreen manages edit state locally (no store caching of profile data) — after save, it just updates the local `displayName` string. Email change is out of scope (requires Supabase Auth email flow).
+- **Caretaker invite flow (Phase 2)** — three coordinated surfaces: `invite-caretaker` Edge Function, `caretakerService.ts` client wrapper, and two screens (`ManageCaretakersScreen`, `InviteCaretakerScreen`). The Edge Function always sets `invite_expires_at` to 7 days from now; the client-passed `expiresAt` is stored separately on `garden_invites.expires_at` and carried forward into `garden_caretakers.expires_at` on acceptance (Phase 3). If an expired invite exists for the same `(owner_id, invitee_email)`, the Edge Function deletes it before creating a fresh one — users can retry stale invites without manually cancelling.
+- **Caretaker invite email body** (matches the Phase 2 plan exactly) — hardcoded template in `invite-caretaker/index.ts :: buildInviteEmailHtml`. HTML-escapes `ownerName` and `inviteeEmail` before interpolation. Subject: `"{ownerName} wants you to help care for their plants"`. Text fallback is auto-generated by Resend (no manual `text` field).
+- **Caretaker error-code → UI copy mapping** lives only in `InviteCaretakerScreen :: mapErrorCodeToMessage`. Keep this in sync with the plan's "Error display mapping" table when adding new codes. `already_invited`, `already_caretaker`, `self_invite`, `invalid_email`, `email_send_failed` each have a dedicated string; anything else falls back to the generic "Something went wrong" message.
+- **ManageCaretakersScreen refresh strategy** — loads on mount, on pull-to-refresh, and on `navigation.addListener('focus', …)` so returning from InviteCaretakerScreen picks up the new pending invite without a dedicated callback. No real-time subscription. "Resend" for an expired invite is a client-side cancel + re-invite (two separate calls), which means the Edge Function's duplicate-detection will still see the old row if the cancel fails — acceptable for v1 because cancel via RLS rarely fails.
+- **InviteCaretakerScreen expiry stepper** — chose a simple ± stepper over a native `DateTimePicker` to avoid pulling in `@react-native-community/datetimepicker` just for Phase 2. Default is today + 14 days; min is tomorrow 00:00 local. If the human flow finds this awkward, swapping in the community picker is a one-screen, no-Edge-Function change.
 
 ## AI Integration Pattern
 
@@ -211,6 +226,15 @@ Error codes: `not_a_plant` (422), `rate_limited` (429), `analysis_failed` (422),
 
 Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SERVICE_ROLE_KEY`.
 
+## Caretaker Mode Integration Pattern (Phases 0–2 complete)
+
+- **Schema** (`supabase/migrations/003_caretaker_mode.sql`, applied remotely, not yet mirrored locally): `garden_caretakers` (owner_id, caretaker_id, expires_at), `garden_invites` (owner_id, invitee_email lowercased, token, invite_expires_at default 7d, expires_at for caretaker access, accepted_at), `caretaker_notes` (plant_id, author_id, body). RLS helper `has_garden_access(uuid)` is SECURITY DEFINER.
+- **Invite Edge Function** at `supabase/functions/invite-caretaker/index.ts` — Deno runtime, decodes JWT (gateway-validated), validates input, uses service role client to insert into `garden_invites` and send a Resend email via the shared `_shared/sendEmail.ts` helper (from-address `Vira <hello@viraplants.com>`). Rolls back the invite row on email failure. Nested error shape `{ error: { code, message } }`.
+- **Client service** (`src/services/caretakerService.ts`) — one service for all caretaker APIs. Read helpers (`listMyInvites`, `listMyCaretakers`) run through RLS via the regular supabase client; writes via RLS (`cancelInvite`, `revokeCaretaker`, `updateCaretakerExpiry`) or via Edge Function (`inviteCaretaker`). Phase 3+ exports are typed stubs that throw `CaretakerError('not_implemented', …)`.
+- **UI surface** — `SettingsScreen` → `ManageCaretakersScreen` → `InviteCaretakerScreen` (modal). No real-time subscriptions; list screens refetch on mount + focus + pull-to-refresh.
+
+Edge Function secrets in play for caretaker mode: `RESEND_API_KEY`, `SERVICE_ROLE_KEY`.
+
 ## Deployment Learnings (Mar 2026)
 
 - **"Verify JWT with legacy secret" must be OFF** — Supabase Edge Function setting in Dashboard → Edge Functions → Settings. Must be disabled for functions receiving user JWTs, otherwise auth will silently fail.
@@ -224,6 +248,9 @@ Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SE
 - **Always specify `--simulator` flag** when a physical device is connected, otherwise `run-ios` may target the device unexpectedly.
 - **Supabase anon key** is a long JWT starting with `eyJ`, found in Dashboard → Settings → API.
 - **Edge Function redeployment required** after changing project config (e.g., rotating keys) — the running function keeps stale env values until redeployed via `supabase functions deploy`.
+- **Resend as the transactional email provider (Apr 2026)** — chose REST (raw fetch) over the Resend SDK in `_shared/sendEmail.ts` to keep Deno deps lean and avoid local/deploy version drift. API key stored as `RESEND_API_KEY` Edge Function secret. Domain `viraplants.com` verified via SPF/DKIM/MX/DMARC; from-address `Vira <hello@viraplants.com>` is hardcoded in the helper.
+- **`FunctionsHttpError.context` is a Response, not the parsed body** (supabase-js 2.99) — to read the Edge Function's error body on the client, call `.json()` on `error.context` (see `caretakerService.ts :: extractFunctionError`). The earlier `aiService.ts` read `error.context` as a plain object, which silently falls through to the generic fallback message; prefer the caretakerService pattern for new code.
+- **Edge Function error shape convention** — new Edge Functions (starting with `invite-caretaker`) return the nested `{ error: { code, message } }` shape specified in the CE plan. Legacy `analyze-plant` returns the flat `{ error: 'code', message: '…' }` shape. The caretaker client handles both for forward/back compatibility.
 
 ## Pre-Launch Checklist
 
