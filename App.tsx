@@ -10,6 +10,8 @@ import {HomeScreen} from './src/screens/HomeScreen';
 import {PlantDetailScreen} from './src/screens/PlantDetailScreen';
 import {AddPlantScreen} from './src/screens/AddPlantScreen';
 import {SettingsScreen} from './src/screens/SettingsScreen';
+import {ManageCaretakersScreen} from './src/screens/ManageCaretakersScreen';
+import {InviteCaretakerScreen} from './src/screens/InviteCaretakerScreen';
 import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
@@ -145,6 +147,19 @@ const App = () => {
               />
               <Stack.Screen name="AddPlant" component={AddPlantScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen
+                name="ManageCaretakers"
+                component={ManageCaretakersScreen}
+                options={{title: 'Caretakers'}}
+              />
+              <Stack.Screen
+                name="InviteCaretaker"
+                component={InviteCaretakerScreen}
+                options={{
+                  presentation: 'modal',
+                  title: 'Invite a caretaker',
+                }}
+              />
             </>
           )}
         </Stack.Navigator>

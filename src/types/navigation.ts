@@ -6,4 +6,6 @@ export type RootStackParamList = {
     PlantDetail: { plantId: string };
     AddPlant: { defaultLocation?: string } | undefined;
     Settings: undefined;
+    ManageCaretakers: undefined;
+    InviteCaretaker: undefined;
   };
