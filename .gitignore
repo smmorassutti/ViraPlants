@@ -83,3 +83,4 @@ ios/supabase/.temp/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+ios/ExportOptions.plist
