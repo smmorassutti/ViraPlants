@@ -84,3 +84,4 @@ ios/supabase/.temp/
 !.yarn/sdks
 !.yarn/versions
 ios/ExportOptions.plist
+.claude/
