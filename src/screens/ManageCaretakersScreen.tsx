@@ -21,34 +21,9 @@ import {
   CaretakerError,
 } from '../services/caretakerService';
 import type {GardenCaretaker, GardenInvite} from '../services/caretakerService';
+import {formatFullDate, formatRelative, isInviteExpired} from '../utils/formatDate';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManageCaretakers'>;
-
-// ── Date helpers ──
-
-const formatFullDate = (iso: string): string =>
-  new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(iso));
-
-const formatRelative = (iso: string): string => {
-  const delta = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(delta / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
-  return formatFullDate(iso);
-};
-
-const isInviteExpired = (invite: GardenInvite): boolean => {
-  if (!invite.inviteExpiresAt) return false;
-  return new Date(invite.inviteExpiresAt).getTime() < Date.now();
-};
 
 const getInitials = (name: string | null, fallback: string): string => {
   const source = (name ?? fallback).trim();
