@@ -117,6 +117,3 @@ $$;
  
 REVOKE ALL ON FUNCTION public.accept_garden_invite(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.accept_garden_invite(uuid, uuid) TO service_role;
-
-REVOKE ALL ON FUNCTION public.accept_garden_invite(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.accept_garden_invite(uuid, uuid) TO service_role;
