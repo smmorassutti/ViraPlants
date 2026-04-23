@@ -17,18 +17,24 @@
 -- EXECUTE is granted only to service_role — regular clients must go
 -- through the Edge Function.
 --
+-- Column naming note (ambiguity fix): RETURNS TABLE(...) column names
+-- must NOT collide with column names on tables referenced inside the
+-- function body (garden_invites, garden_caretakers, profiles, auth.users).
+-- If they do, Postgres raises 42702 "column reference ... is ambiguous"
+-- at execution time, even though the function compiles fine. Using the
+-- `garden_owner_*` prefix on output columns guarantees no collision.
+--
 -- NOTE: As with migrations 003 and 003b, this file is a backfill.
 -- Apply via the Supabase Dashboard SQL Editor.
 -- =====================================================================
-
+ 
 CREATE OR REPLACE FUNCTION public.accept_garden_invite(
   p_invite_id uuid,
   p_caretaker_id uuid
 )
 RETURNS TABLE(
-  owner_id uuid,
-  owner_display_name text,
-  owner_email text
+  garden_owner_id uuid,
+  garden_owner_display_name text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -44,32 +50,34 @@ BEGIN
   FROM public.garden_invites
   WHERE id = p_invite_id
   FOR UPDATE;
-
+ 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'invite_not_found';
   END IF;
-
+ 
   IF v_invite.accepted_at IS NOT NULL THEN
     RAISE EXCEPTION 'invite_already_accepted';
   END IF;
-
+ 
   IF v_invite.invite_expires_at < NOW() THEN
     RAISE EXCEPTION 'invite_expired';
   END IF;
-
+ 
   -- Guard against duplicate caretaker row. If one already exists, we still
   -- resolve the invite (set accepted_at) so it stops appearing as pending,
   -- then raise a distinct error so the caller knows no new access was granted.
+  -- Column refs in WHERE are table-qualified to avoid any future ambiguity.
   IF EXISTS (
-    SELECT 1 FROM public.garden_caretakers
-    WHERE owner_id = v_invite.owner_id AND caretaker_id = p_caretaker_id
+    SELECT 1 FROM public.garden_caretakers gc
+    WHERE gc.owner_id = v_invite.owner_id
+      AND gc.caretaker_id = p_caretaker_id
   ) THEN
     UPDATE public.garden_invites
     SET accepted_at = NOW()
     WHERE id = p_invite_id;
     RAISE EXCEPTION 'already_caretaker';
   END IF;
-
+ 
   -- Atomic: insert caretaker row + mark invite accepted.
   -- garden_caretakers.accepted_at and invited_at have NOT NULL defaults of
   -- now(); we pass invited_at explicitly so it reflects when the invite was
@@ -84,25 +92,31 @@ BEGIN
     NOW(),
     v_invite.expires_at
   );
-
+ 
   UPDATE public.garden_invites
   SET accepted_at = NOW()
   WHERE id = p_invite_id;
-
+ 
   -- Look up owner's email from auth.users (profiles has no email column)
-  -- and display name from profiles (nullable).
+  -- and display name from profiles (nullable). Email stays local to this
+  -- function — used only for the COALESCE fallback below, not returned.
   SELECT au.email, p.display_name
   INTO v_owner_email, v_owner_name
   FROM auth.users au
   LEFT JOIN public.profiles p ON p.id = au.id
   WHERE au.id = v_invite.owner_id;
-
+ 
+  -- Return only id + display name. Display name falls back to the email
+  -- prefix (split_part(email, '@', 1)) when the owner has no profile name.
+  -- Owner email never leaves the database.
   RETURN QUERY SELECT
     v_invite.owner_id,
-    COALESCE(v_owner_name, split_part(v_owner_email, '@', 1)),
-    v_owner_email;
+    COALESCE(v_owner_name, split_part(v_owner_email, '@', 1));
 END;
 $$;
+ 
+REVOKE ALL ON FUNCTION public.accept_garden_invite(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.accept_garden_invite(uuid, uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.accept_garden_invite(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.accept_garden_invite(uuid, uuid) TO service_role;
