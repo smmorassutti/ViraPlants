@@ -1,13 +1,20 @@
 // Caretaker Service — client wrapper around caretaker mode APIs.
 //
-// Phase 2 exports are implemented:
+// Phase 2 (owner-side) exports:
 //   - inviteCaretaker, listMyInvites, listMyCaretakers,
 //   - cancelInvite, revokeCaretaker, updateCaretakerExpiry
 //
-// Later-phase exports exist as typed stubs that throw; they'll be implemented
-// in Phase 3+:
-//   - listGardensImCaretaking, listPendingInvitesForMe,
-//   - acceptInvite, declineInvite
+// Phase 3 (caretaker-side) exports:
+//   - listPendingInvitesForMe, acceptInvite, declineInvite
+//
+// Phase 4 stub remains:
+//   - listGardensImCaretaking
+//
+// Owner/caretaker asymmetry (intentional, temporary): owner-side list + cancel
+// go through the caretaker-invites Edge Function because they predate the
+// auth.jwt() ->> 'email' RLS fix. Caretaker-side list + decline hit PostgREST
+// directly. Unifying both sides onto direct PostgREST is deferred to
+// post-Phase-6 cleanup.
 
 import {supabase} from './supabase';
 
@@ -48,6 +55,11 @@ export interface PendingInvite {
   inviteeEmail: string;
   inviteExpiresAt: string | null;
   createdAt: string;
+}
+
+export interface AcceptedInvite {
+  ownerId: string;
+  ownerName: string;
 }
 
 export class CaretakerError extends Error {
@@ -304,7 +316,113 @@ export async function updateCaretakerExpiry(
   if (error) throw new CaretakerError('update_failed', error.message);
 }
 
-// ── Phase 3/4 stubs (declared so imports typecheck, not yet implemented) ──
+// ── Phase 3: Caretaker-side APIs ──
+
+type PendingInviteRow = {
+  id: string;
+  owner_id: string;
+  invitee_email: string;
+  invite_expires_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
+/**
+ * List pending invites addressed to the current user's email.
+ *
+ * Relies on the `invitee_can_view_own_invites` RLS policy on `garden_invites`,
+ * which scopes rows by `auth.jwt() ->> 'email'` (see migration 003b). No
+ * Edge Function needed.
+ *
+ * Owner names come from a second lookup against `public.profiles` (RLS on
+ * profiles allows any authenticated user to read display_name + avatar_url).
+ * Owners without a display_name fall back to "Your plant friend" because
+ * caretakers cannot read owner emails via PostgREST.
+ */
+export async function listPendingInvitesForMe(): Promise<PendingInvite[]> {
+  const {data: inviteData, error: inviteErr} = await supabase
+    .from('garden_invites')
+    .select('id, owner_id, invitee_email, invite_expires_at, expires_at, created_at')
+    .is('accepted_at', null)
+    .order('created_at', {ascending: false});
+
+  if (inviteErr) throw new CaretakerError('query_failed', inviteErr.message);
+
+  const rows = (inviteData as PendingInviteRow[] | null) ?? [];
+  if (rows.length === 0) return [];
+
+  const ownerIds = Array.from(new Set(rows.map(r => r.owner_id)));
+  const {data: profileData, error: profileErr} = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', ownerIds);
+
+  if (profileErr) throw new CaretakerError('query_failed', profileErr.message);
+
+  const nameByOwnerId = new Map<string, string>();
+  for (const row of (profileData as ProfileRow[] | null) ?? []) {
+    if (row.display_name && row.display_name.trim().length > 0) {
+      nameByOwnerId.set(row.id, row.display_name.trim());
+    }
+  }
+
+  return rows.map(row => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    ownerName: nameByOwnerId.get(row.owner_id) ?? null,
+    inviteeEmail: row.invitee_email,
+    inviteExpiresAt: row.invite_expires_at,
+    createdAt: row.created_at,
+  }));
+}
+
+/**
+ * Accept an invite. Routes through the `accept-invite` Edge Function, which
+ * calls the SECURITY DEFINER RPC `accept_garden_invite` to atomically insert
+ * into `garden_caretakers` and flip `garden_invites.accepted_at`.
+ */
+export async function acceptInvite(inviteId: string): Promise<AcceptedInvite> {
+  const {data, error} = await supabase.functions.invoke('accept-invite', {
+    body: {inviteId},
+  });
+
+  if (error) {
+    const {code, message} = await extractFunctionError(error);
+    throw new CaretakerError(code, message);
+  }
+
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    typeof (data as {ownerId?: unknown}).ownerId !== 'string' ||
+    typeof (data as {ownerName?: unknown}).ownerName !== 'string'
+  ) {
+    throw new CaretakerError(
+      'invalid_response',
+      'Something went wrong. Please try again.',
+    );
+  }
+
+  return {
+    ownerId: (data as {ownerId: string}).ownerId,
+    ownerName: (data as {ownerName: string}).ownerName,
+  };
+}
+
+/**
+ * Decline an invite. Direct PostgREST DELETE; relies on the RLS policy
+ * `owner_or_invitee_can_delete` which lets either the owner or the invitee
+ * (matched by `auth.jwt() ->> 'email'`) delete an unaccepted invite.
+ */
+export async function declineInvite(inviteId: string): Promise<void> {
+  const {error} = await supabase
+    .from('garden_invites')
+    .delete()
+    .eq('id', inviteId);
+  if (error) throw new CaretakerError('delete_failed', error.message);
+}
+
+// ── Phase 4 stub ──
 
 /**
  * Phase 4 — list gardens the current user is caretaking.
@@ -313,37 +431,5 @@ export async function listGardensImCaretaking(): Promise<GardenSummary[]> {
   throw new CaretakerError(
     'not_implemented',
     'listGardensImCaretaking is implemented in Phase 4.',
-  );
-}
-
-/**
- * Phase 3 — list pending invites addressed to the current user.
- */
-export async function listPendingInvitesForMe(): Promise<PendingInvite[]> {
-  throw new CaretakerError(
-    'not_implemented',
-    'listPendingInvitesForMe is implemented in Phase 3.',
-  );
-}
-
-/**
- * Phase 3 — accept an invite. Calls the `accept-invite` Edge Function.
- */
-export async function acceptInvite(
-  _inviteId: string,
-): Promise<{ownerId: string; ownerName: string}> {
-  throw new CaretakerError(
-    'not_implemented',
-    'acceptInvite is implemented in Phase 3.',
-  );
-}
-
-/**
- * Phase 3 — decline an invite (DELETE via RLS policy).
- */
-export async function declineInvite(_inviteId: string): Promise<void> {
-  throw new CaretakerError(
-    'not_implemented',
-    'declineInvite is implemented in Phase 3.',
   );
 }
