@@ -8,12 +8,21 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  ScrollView,
+  RefreshControl,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
 import {useAuthStore} from '../store/useAuthStore';
 import {signOut, getProfile, updateProfile} from '../services/auth';
 import {ViraLeafMark} from '../components/ViraLeafMark';
+import {PendingInviteCard} from '../components/PendingInviteCard';
+import {
+  listPendingInvitesForMe,
+  acceptInvite,
+  declineInvite,
+} from '../services/caretakerService';
+import type {PendingInvite} from '../services/caretakerService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -28,6 +37,21 @@ export const SettingsScreen: React.FC<Props> = ({navigation}) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
+
+  // Pending invitations (Phase 3)
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadPendingInvites = useCallback(async () => {
+    try {
+      const invites = await listPendingInvitesForMe();
+      setPendingInvites(invites);
+    } catch {
+      // Failing silently here is intentional — the section only renders if
+      // we get invites, so an error just leaves the user in the same state
+      // as having none. Retry happens on pull-to-refresh or next mount.
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -58,6 +82,39 @@ export const SettingsScreen: React.FC<Props> = ({navigation}) => {
       })
       .finally(() => setProfileLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadPendingInvites();
+  }, [user, loadPendingInvites]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadPendingInvites();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadPendingInvites]);
+
+  const handleAcceptInvite = useCallback(
+    async (inviteId: string) => {
+      await acceptInvite(inviteId);
+      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+      // TODO(phase-4): trigger useGardenStore.loadGardens() refresh; in phase 4
+      // the accepted garden becomes visible in the home header garden list,
+      // which is the durable confirmation surface.
+    },
+    [],
+  );
+
+  const handleDeclineInvite = useCallback(
+    async (inviteId: string) => {
+      await declineInvite(inviteId);
+      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+    },
+    [],
+  );
 
   const handleSignOut = useCallback(() => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -113,119 +170,143 @@ export const SettingsScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <ViraLeafMark size={32} variant="butterMoon" />
-        <Text style={styles.heading}>Settings</Text>
-      </View>
-
-      {profileLoading ? (
-        <View style={styles.loadingCard}>
-          <ActivityIndicator color={viraTheme.colors.hemlock} size="small" />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={viraTheme.colors.butterMoon}
+          />
+        }>
+        <View style={styles.header}>
+          <ViraLeafMark size={32} variant="butterMoon" />
+          <Text style={styles.heading}>Settings</Text>
         </View>
-      ) : (
-        <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <ViraLeafMark size={40} variant="hemlock" />
-          </View>
 
-          {isEditingName ? (
-            <View style={styles.nameEditContainer}>
-              <TextInput
-                style={styles.nameInput}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Your name"
-                placeholderTextColor={viraTheme.colors.textMuted}
-                maxLength={50}
-                autoFocus
-                autoCapitalize="words"
-                returnKeyType="done"
-                onSubmitEditing={handleSaveName}
-                accessibilityLabel="Display name"
+        {pendingInvites.length > 0 ? (
+          <View style={styles.pendingSection}>
+            <Text style={styles.sectionHeader}>Pending invitations</Text>
+            {pendingInvites.map(invite => (
+              <PendingInviteCard
+                key={invite.id}
+                invite={invite}
+                onAccept={() => handleAcceptInvite(invite.id)}
+                onDecline={() => handleDeclineInvite(invite.id)}
               />
-              <View style={styles.nameEditActions}>
+            ))}
+          </View>
+        ) : null}
+
+        {profileLoading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={viraTheme.colors.hemlock} size="small" />
+          </View>
+        ) : (
+          <View style={styles.profileCard}>
+            <View style={styles.avatarContainer}>
+              <ViraLeafMark size={40} variant="hemlock" />
+            </View>
+
+            {isEditingName ? (
+              <View style={styles.nameEditContainer}>
+                <TextInput
+                  style={styles.nameInput}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Your name"
+                  placeholderTextColor={viraTheme.colors.textMuted}
+                  maxLength={50}
+                  autoFocus
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSaveName}
+                  accessibilityLabel="Display name"
+                />
+                <View style={styles.nameEditActions}>
+                  <TouchableOpacity
+                    onPress={handleCancelEditName}
+                    disabled={isSavingName}
+                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel editing name">
+                    <Text style={styles.nameCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSaveName}
+                    disabled={isSavingName}
+                    hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save display name">
+                    {isSavingName ? (
+                      <ActivityIndicator
+                        color={viraTheme.colors.vermillion}
+                        size="small"
+                      />
+                    ) : (
+                      <Text style={styles.nameSaveText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.nameRow}>
+                {displayName ? (
+                  <Text style={styles.displayName}>{displayName}</Text>
+                ) : (
+                  <Text style={[styles.displayName, styles.displayNameEmpty]}>
+                    Add your name
+                  </Text>
+                )}
                 <TouchableOpacity
-                  onPress={handleCancelEditName}
-                  disabled={isSavingName}
+                  onPress={handleStartEditName}
                   hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
                   accessibilityRole="button"
-                  accessibilityLabel="Cancel editing name">
-                  <Text style={styles.nameCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSaveName}
-                  disabled={isSavingName}
-                  hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-                  accessibilityRole="button"
-                  accessibilityLabel="Save display name">
-                  {isSavingName ? (
-                    <ActivityIndicator
-                      color={viraTheme.colors.vermillion}
-                      size="small"
-                    />
-                  ) : (
-                    <Text style={styles.nameSaveText}>Save</Text>
-                  )}
+                  accessibilityLabel="Edit display name">
+                  <Text style={styles.editNameLabel}>Edit</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          ) : (
-            <View style={styles.nameRow}>
-              {displayName ? (
-                <Text style={styles.displayName}>{displayName}</Text>
-              ) : (
-                <Text style={[styles.displayName, styles.displayNameEmpty]}>
-                  Add your name
-                </Text>
-              )}
-              <TouchableOpacity
-                onPress={handleStartEditName}
-                hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-                accessibilityRole="button"
-                accessibilityLabel="Edit display name">
-                <Text style={styles.editNameLabel}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
 
-          {user?.email ? (
-            <Text style={styles.email}>{user.email}</Text>
-          ) : null}
+            {user?.email ? (
+              <Text style={styles.email}>{user.email}</Text>
+            ) : null}
 
-          {memberSince ? (
-            <Text style={styles.memberSince}>
-              Member since {memberSince}
+            {memberSince ? (
+              <Text style={styles.memberSince}>
+                Member since {memberSince}
+              </Text>
+            ) : null}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.navRow}
+          onPress={() => navigation.navigate('ManageCaretakers')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Manage caretakers">
+          <View style={styles.navRowLabelContainer}>
+            <Text style={styles.navRowLabel}>Caretakers</Text>
+            <Text style={styles.navRowHelp}>
+              Invite someone to help care for your plants
             </Text>
-          ) : null}
-        </View>
-      )}
+          </View>
+          <Text style={styles.navRowChevron}>{'›'}</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.navRow}
-        onPress={() => navigation.navigate('ManageCaretakers')}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel="Manage caretakers">
-        <View style={styles.navRowLabelContainer}>
-          <Text style={styles.navRowLabel}>Caretakers</Text>
-          <Text style={styles.navRowHelp}>
-            Invite someone to help care for your plants
+        <TouchableOpacity
+          style={[styles.signOutButton, isSigningOut && styles.buttonDisabled]}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+          disabled={isSigningOut}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out">
+          <Text style={styles.signOutText}>
+            {isSigningOut ? 'Signing out...' : 'SIGN OUT'}
           </Text>
-        </View>
-        <Text style={styles.navRowChevron}>{'›'}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.signOutButton, isSigningOut && styles.buttonDisabled]}
-        onPress={handleSignOut}
-        activeOpacity={0.7}
-        disabled={isSigningOut}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out">
-        <Text style={styles.signOutText}>
-          {isSigningOut ? 'Signing out...' : 'SIGN OUT'}
-        </Text>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 };
@@ -234,7 +315,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: viraTheme.colors.hemlock,
+  },
+  scroll: {
     padding: viraTheme.spacing.xxl,
+    paddingBottom: viraTheme.spacing.xxxl,
   },
   header: {
     flexDirection: 'row',
@@ -245,6 +329,14 @@ const styles = StyleSheet.create({
   heading: {
     ...viraTheme.typography.heading1,
     color: viraTheme.colors.butterMoon,
+  },
+  pendingSection: {
+    marginBottom: viraTheme.spacing.xxl,
+  },
+  sectionHeader: {
+    ...viraTheme.typography.label,
+    color: viraTheme.colors.thistle,
+    marginBottom: viraTheme.spacing.md,
   },
   loadingCard: {
     backgroundColor: viraTheme.colors.butterMoon,
