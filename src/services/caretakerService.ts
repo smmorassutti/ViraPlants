@@ -340,9 +340,15 @@ type PendingInviteRow = {
  * caretakers cannot read owner emails via PostgREST.
  */
 export async function listPendingInvitesForMe(): Promise<PendingInvite[]> {
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr) throw new CaretakerError('query_failed', userErr.message);
+  const myEmail = (userData?.user?.email ?? '').toLowerCase();
+  if (!myEmail) return [];
+
   const {data: inviteData, error: inviteErr} = await supabase
     .from('garden_invites')
     .select('id, owner_id, invitee_email, invite_expires_at, expires_at, created_at')
+    .eq('invitee_email', myEmail)
     .is('accepted_at', null)
     .order('created_at', {ascending: false});
 

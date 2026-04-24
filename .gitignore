@@ -85,3 +85,6 @@ ios/supabase/.temp/
 !.yarn/versions
 ios/ExportOptions.plist
 .claude/
+
+# Editor autosave artifacts (nano, etc.)
+*.save

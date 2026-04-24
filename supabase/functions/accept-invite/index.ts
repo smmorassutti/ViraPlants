@@ -17,8 +17,8 @@
 //      SECURITY DEFINER Postgres function that atomically inserts into
 //      garden_caretakers and flips garden_invites.accepted_at
 //   6. Map RPC exception messages to HTTP error codes
-//   7. Strip owner_email from the response (private) — return only
-//      { success, ownerId, ownerName }
+//   7. Return only { success, ownerId, ownerName } — owner_email never
+//      leaves the database
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -49,9 +49,8 @@ interface JwtPayload {
 }
 
 interface AcceptInviteRpcRow {
-  owner_id: string;
-  owner_display_name: string | null;
-  owner_email: string | null;
+  garden_owner_id: string;
+  garden_owner_display_name: string | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -205,21 +204,21 @@ serve(async (req: Request) => {
     // supabase-js returns RPC RETURNS TABLE(...) as an array of rows.
     const rows = (rpcData as AcceptInviteRpcRow[] | null) ?? [];
     const row = rows[0];
-    if (!row || typeof row.owner_id !== 'string') {
+    if (!row || typeof row.garden_owner_id !== 'string') {
       console.error('accept_garden_invite returned unexpected payload:', rpcData);
       return errorResponse('internal', 'Could not accept the invitation.', 500);
     }
 
-    // Do NOT include owner_email in the response — private. The RPC returns
-    // it so future callers can fall back to the email prefix; the display
-    // name fallback has already been applied in the RPC itself (COALESCE).
+    // The RPC returns the owner_id and an already-coalesced display name
+    // (falls back to email prefix inside the RPC when the owner has no
+    // profile name). Owner email never leaves the database.
     const ownerName =
-      typeof row.owner_display_name === 'string' && row.owner_display_name.length > 0
-        ? row.owner_display_name
+      typeof row.garden_owner_display_name === 'string' && row.garden_owner_display_name.length > 0
+        ? row.garden_owner_display_name
         : 'Your plant friend';
 
     return jsonResponse(
-      { success: true, ownerId: row.owner_id, ownerName },
+      { success: true, ownerId: row.garden_owner_id, ownerName },
       200,
     );
   } catch (err) {
