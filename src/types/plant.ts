@@ -13,7 +13,8 @@ export interface Reminder {
 export interface CareEvent {
   id?: string;
   plantId?: string;
-  userId?: string;
+  authorId?: string;
+  authorDisplayName?: string | null;
   type?: 'water' | 'fertilize' | 'repot' | 'prune' | 'photo_update';
   /** @deprecated Use createdAt. Kept for local compatibility — not persisted to DB. */
   occurredAt?: string;

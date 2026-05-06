@@ -26,11 +26,12 @@ type PlantRow = {
 type CareEventRow = {
   id: string;
   plant_id: string;
-  user_id: string;
+  author_id: string;
   type: string;
   source: string;
   notes: string | null;
   created_at: string;
+  author?: {display_name: string | null} | null;
 };
 
 const rowToPlant = (row: PlantRow, careEvents: CareEvent[] = []): Plant => ({
@@ -58,7 +59,8 @@ const rowToPlant = (row: PlantRow, careEvents: CareEvent[] = []): Plant => ({
 const rowToCareEvent = (row: CareEventRow): CareEvent => ({
   id: row.id,
   plantId: row.plant_id,
-  userId: row.user_id,
+  authorId: row.author_id,
+  authorDisplayName: row.author?.display_name ?? null,
   type: row.type as CareEvent['type'],
   source: row.source as CareEvent['source'],
   notes: row.notes ?? undefined,
@@ -67,11 +69,11 @@ const rowToCareEvent = (row: CareEventRow): CareEvent => ({
 
 // ── CRUD ──
 
-export const fetchPlants = async (userId: string): Promise<Plant[]> => {
+export const fetchPlants = async (gardenId: string): Promise<Plant[]> => {
   const {data: plantRows, error: plantError} = await supabase
     .from('plants')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', gardenId)
     .order('created_at', {ascending: false});
 
   if (plantError) throw plantError;
@@ -166,7 +168,7 @@ export const addCareEvent = async (
     .from('care_events')
     .insert({
       plant_id: plantId,
-      user_id: userId,
+      author_id: userId,
       type,
       source,
     })

@@ -21,7 +21,7 @@ type PlantStoreActions = {
 
   // Plants
   setPlants: (plants: Plant[]) => void;
-  loadPlants: () => Promise<void>;
+  loadPlants: (gardenId: string) => Promise<void>;
   addPlant: (plant: PlantInput) => Promise<Plant>;
   updatePlant: (id: string, updates: Partial<Plant>) => void;
   removePlant: (id: string) => void;
@@ -62,16 +62,12 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
   // ── Plants ──
   setPlants: (plants) => set({plants}),
 
-  loadPlants: async () => {
-    const userId = getUserId();
-    if (!userId) return;
+  loadPlants: async (gardenId) => {
+    if (!gardenId) return;
     try {
-      const remotePlants = await plantService.fetchPlants(userId);
-      // Merge: keep optimistic temp plants that haven't synced yet
-      set((state) => {
-        const tempPlants = state.plants.filter((p) => p.id.startsWith('temp-'));
-        return {plants: [...remotePlants, ...tempPlants]};
-      });
+      const remotePlants = await plantService.fetchPlants(gardenId);
+      // Full replace: switching gardens drops the previous garden's plants.
+      set({plants: remotePlants});
     } catch (error) {
       console.warn('Failed to load plants:', error);
     }
@@ -164,6 +160,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
       ...event,
       id: event.id || generateTempId(),
       plantId,
+      authorId: userId ?? undefined,
       occurredAt: now,
       source: event.source || 'manual',
       createdAt: now,
