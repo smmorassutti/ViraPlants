@@ -3,6 +3,9 @@
 Branch: `phase-4-caretaker-mode`
 Author: Claude Code (Phase 4 v3.0 session)
 Started: 2026-05-06
+Pause-1 sign-off: ✅ Sam (May 6, 2026) — RLS smoke tests + simulator launches passed for owner and caretaker2.
+Pause-2 sign-off: ✅ Sam (May 6, 2026) — picker, banner, plant-detail pop-on-switch, force-quit-relaunch rehydration, revocation fallback all confirmed.
+Pause-3 sign-off: ✅ Sam (May 6, 2026) — write-gating, attribution avatars, generic 42501 toast, notification gate all confirmed. Ready to merge.
 
 ---
 
@@ -222,3 +225,24 @@ iPhone 17 Pro simulator, after migrations apply.
 15. [ ] As caretaker2 in owner's garden, attempt to navigate to AddPlant via any deep-link or programmatic nav (typing into Metro debug menu, etc.). Screen pops back immediately with no content flash.
 
 **Post-flight cleanup (Block 4):** I'll remove the [DEBUG] button after sign-off.
+
+---
+
+## Final pass record
+
+| Pause | Block | Sign-off | Notes |
+|-------|-------|----------|-------|
+| 1     | 4.0–4.2 | ✅ Sam (May 6) | Migrations 005 + 006 applied via Dashboard SQL Editor. RLS smoke tests passed for owner / caretaker2 / unrelated user — first live exercise of `has_garden_access(uuid)` for non-owner reads. App launches as owner and as caretaker2 clean. |
+| 2     | 4.3–4.4 | ✅ Sam (May 6) | Picker opens, switches gardens, banner shows/hides correctly. Pull-to-refresh wired to active garden. Force-quit → relaunch reopens on owner's garden (rehydration race confirmed fixed). PlantDetailScreen pops automatically when active garden changes. Revoke-mid-session falls back silently to own. |
+| 3     | 4.5–4.6 | ✅ Sam (May 6) | Caretaker UI gating clean (FAB hidden, Edit/Remove hidden, Notes read-only, AddPlantScreen unreachable). Mark Watered/Fertilized work for caretaker. Care event attribution avatars render only for non-self events (D2). [DEBUG] Force remove confirmed 42501 + generic toast + no removal. Notification gate confirmed: caretaker → no notification, owner → notification at 9 AM next day. |
+
+### Block 4 cleanup
+
+- ✅ `__DEV__` debug `[DEBUG] Force remove` button removed from `PlantDetailScreen`.
+- ✅ `CLAUDE.md` Done section updated with Phase 4 entry.
+- ✅ `CLAUDE.md` Caretaker Mode Integration Pattern updated to "Phases 0–4 complete" with Phase 4 schema, store, write-gating, attribution, notification-gate sections.
+- ✅ `CLAUDE.md` Implementation Notes — added Phase 4 entries: garden state shape + naming, Zustand `persist` rehydration awaiting, `loadPlants(gardenId)` signature, `CareEvent.authorId` rename, PostgREST embed FK requirement, `isOwnGarden` selector pattern, notification gate signature, `getInitials` shared util, `showErrorToast` toast primitive.
+- ✅ `CLAUDE.md` Deployment Learnings — added Phase 4 entries: Zustand persist rehydration awaiting, PostgREST FK requirement, first live RLS exercise of `has_garden_access`, account-switch persisted-id limitation, generic 42501 toast philosophy.
+- ✅ `CLAUDE.md` Next-up — Phase 4 removed; Phase 5 (caretaker notes) moved to position 1.
+- ✅ Final `npx tsc --noEmit`: 0 errors. Hardcoded-hex / `any` / unselectored-store scans on full Phase 4 surface: 0 matches.
+- ✅ Session handoff doc generated at `Vira_Session_Handoff_2026-05-06.docx` (via `scripts/generate_handoff_phase4.py`, mirroring the Phase 3 generator).

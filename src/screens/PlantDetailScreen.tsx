@@ -916,25 +916,6 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* DEV-only negative-test button — REMOVE before merging Phase 4. */}
-        {__DEV__ && !isEditing && (
-          <View style={styles.dangerSection}>
-            <TouchableOpacity
-              onPress={() => {
-                if (!plant?.id) return;
-                try {
-                  removePlant(plant.id);
-                } catch (e) {
-                  console.log('[DEBUG] force remove threw:', e);
-                }
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Debug: force remove plant">
-              <Text style={styles.debugButton}>[DEBUG] Force remove</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
       <GardenPickerBottomSheet visible={pickerVisible} onClose={closePicker} />
     </KeyboardAvoidingView>
@@ -1371,11 +1352,5 @@ const styles = StyleSheet.create({
     ...viraTheme.typography.button,
     color: viraTheme.colors.error,
     fontSize: 14,
-  },
-  debugButton: {
-    ...viraTheme.typography.caption,
-    color: viraTheme.colors.textMuted,
-    fontSize: 11,
-    paddingVertical: viraTheme.spacing.sm,
   },
 });
