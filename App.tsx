@@ -16,6 +16,7 @@ import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
 import {useGardenStore} from './src/store/useGardenStore';
+import {Toast} from './src/components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getSession, onAuthStateChange, configureGoogleSignIn} from './src/services/auth';
 import {requestPermission} from './src/services/notificationService';
@@ -208,6 +209,7 @@ const App = () => {
           )}
         </Stack.Navigator>
       </NavigationContainer>
+      <Toast />
     </>
   );
 };

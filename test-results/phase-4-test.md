@@ -167,4 +167,58 @@ iPhone 17 Pro simulator, after migrations apply.
 
 ## Block 3 — Write-gating, attribution, notification gate (Tasks 4.5–4.6)
 
-_Pending Block 2 sign-off._
+### Code changes landed in Block 3
+
+- `src/services/plantService.ts` — `fetchPlants` now uses a single embedded select `*, care_events(*, author:profiles(display_name))`. Two-query pattern dropped. Care events sorted client-side by `createdAt DESC` post-flatten so the existing UI ordering is preserved.
+- `src/types/plant.ts` — already gained `authorDisplayName: string | null` in Block 1; no changes here.
+- `src/utils/getInitials.ts` — new shared util. Returns "?" for null/empty, first two letters for single-word names, first+last initials for multi-word.
+- `src/components/CareEventAvatar.tsx` — 20×20pt Luxor circle with Butter Moon Montserrat SemiBold 10pt initials. `displayName: string | null` prop; falls back to "?" via the shared util.
+- `src/screens/PlantDetailScreen.tsx` — `HistoryItem` accepts `currentUserId`. Renders `CareEventAvatar` only when `event.authorId !== currentUserId` (the user's own events stay unmarked, per D2).
+- `src/utils/showErrorToast.ts` — new. Tiny Zustand store + `showErrorToast(message)` function.
+- `src/components/Toast.tsx` — fade-in/out, 2s visible, animated `opacity` only (`useNativeDriver: true`). Hemlock background, Butter Moon text. Mounted at `App.tsx` root inside the navigation container.
+- `src/store/usePlantStore.ts` — `addPlant`/`updatePlant`/`removePlant` now check `error?.code === '42501'` and call `showErrorToast(FORBIDDEN_TOAST)`. Other errors keep existing console.warn.
+- `src/services/notificationService.ts` — `scheduleWateringNotification(plant, currentUserId)`. Returns early when `plant.userId !== currentUserId` so caretakers don't get reminders for someone else's plants. `cancelWateringNotification` is unchanged (idempotent).
+- `src/store/usePlantStore.ts` `markWatered` — captures `useAuthStore.getState().user?.id` BEFORE any await, passes it to `scheduleWateringNotification`. `addPlant` does the same on the post-create reschedule.
+- `src/screens/PlantDetailScreen.tsx` `handleSaveEdits` — passes `userId` (already in scope) to `scheduleWateringNotification`.
+- `src/screens/HomeScreen.tsx` — `isOwnGarden` selector. FAB hidden when `!isOwnGarden`. EmptyState button gated too: caretakers viewing the owner's empty garden see "No plants here yet / This gardener hasn't added any plants yet" with no Add button.
+- `src/screens/PlantDetailScreen.tsx` — `isOwnGarden` selector. Header-right Edit hidden, Remove plant section hidden, Notes "Add/Edit" link hidden, Notes TextInput unmounted (only renders when `isEditingNotes && isOwnGarden`). Mark Watered + Mark Fertilized stay enabled per plan §4.6.
+- `src/screens/AddPlantScreen.tsx` — `useLayoutEffect` calls `navigation.goBack()` if `!isOwnGarden`, plus a render-time `if (!isOwnGarden) return null` guard so there's no content flash before pop.
+- **`src/screens/PlantDetailScreen.tsx` __DEV__ debug button** — discreet `[DEBUG] Force remove` text below the danger section, only renders when `__DEV__ === true`. Calls `removePlant(plant.id)` in a try/catch. **Block 4 removes this before merge.**
+
+### Verifications run after code changes
+
+- ✅ `npx tsc --noEmit` — zero errors.
+- ✅ Hardcoded-hex scan on new + modified files — zero matches.
+- ✅ `any`/`@ts-ignore` scan on new + modified files — zero matches.
+- ✅ Unselectored Zustand store destructure scan — zero matches.
+
+### Pause Point 3 — verification checklist (for Sam)
+
+**Setup:** sign in as owner, mark a plant watered (so owner has a self-authored event in history), sign out.
+
+**Sign in as caretaker2:**
+1. [ ] Header reads "My plants" — own (empty) garden by default.
+2. [ ] Switch to owner's garden via picker. Banner appears.
+3. [ ] **HomeScreen:** No FAB visible. EmptyState (if applicable) shows no Add button.
+4. [ ] Tap any plant → PlantDetailScreen.
+5. [ ] **No "Edit" button in header.** No "Remove plant" button. No "Add/Edit" link on Notes.
+6. [ ] **"Mark watered" button is enabled.** Tap it. Confirmation animation fires; care event appears in history.
+7. [ ] Notes field shows the owner's notes (or "No notes from the owner yet."). Cannot tap Add. Cannot focus a TextInput.
+8. [ ] Pop back to Home. The plant's "last watered" updates after a refresh.
+
+**Negative test (the [DEBUG] button):**
+9. [ ] On a plant detail in owner's garden, tap **[DEBUG] Force remove**. Generic toast fires ("Something went wrong. Please try again."). Plant is NOT removed (rollback). Supabase logs show 42501 on `plants` DELETE.
+10. [ ] Without the [DEBUG] button: nothing reachable in the UI produces a 42501. (If anything else does, the UI gate has a hole.)
+
+**Sign back in as owner, open the same plant:**
+11. [ ] Care history shows two events: owner's earlier mark-watered (no avatar) and caretaker2's mark-watered (Luxor circle with caretaker2's initials, Butter Moon text).
+12. [ ] Owner's own actions stay unmarked (D2).
+
+**Notification gate:**
+13. [ ] As caretaker2 marking owner's plant watered: no notification scheduled on caretaker's device.
+14. [ ] As owner marking own plant watered: notification fires at 9 AM next watering day per existing behavior.
+
+**AddPlant route guard (manual check):**
+15. [ ] As caretaker2 in owner's garden, attempt to navigate to AddPlant via any deep-link or programmatic nav (typing into Metro debug menu, etc.). Screen pops back immediately with no content flash.
+
+**Post-flight cleanup (Block 4):** I'll remove the [DEBUG] button after sign-off.

@@ -46,19 +46,28 @@ const getUpcomingTasks = (plants: Plant[]): CareTask[] => {
 
 // ── Empty State ──
 
-const EmptyState: React.FC<{onAddPlant: () => void}> = ({onAddPlant}) => (
+const EmptyState: React.FC<{
+  onAddPlant: () => void;
+  showAddButton: boolean;
+}> = ({onAddPlant, showAddButton}) => (
   <View style={styles.emptyContainer}>
     <Text style={styles.emptyEmoji}>{'\u{1FAB4}'}</Text>
-    <Text style={styles.emptyTitle}>Your garden awaits</Text>
-    <Text style={styles.emptyBody}>
-      Add your first plant and we'll help you keep it happy and thriving.
+    <Text style={styles.emptyTitle}>
+      {showAddButton ? 'Your garden awaits' : 'No plants here yet'}
     </Text>
-    <TouchableOpacity
-      style={styles.emptyButton}
-      onPress={onAddPlant}
-      activeOpacity={0.8}>
-      <Text style={styles.emptyButtonText}>Add your first plant</Text>
-    </TouchableOpacity>
+    <Text style={styles.emptyBody}>
+      {showAddButton
+        ? "Add your first plant and we'll help you keep it happy and thriving."
+        : "This gardener hasn't added any plants yet."}
+    </Text>
+    {showAddButton && (
+      <TouchableOpacity
+        style={styles.emptyButton}
+        onPress={onAddPlant}
+        activeOpacity={0.8}>
+        <Text style={styles.emptyButtonText}>Add your first plant</Text>
+      </TouchableOpacity>
+    )}
   </View>
 );
 
@@ -140,6 +149,9 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
   const activeGardenId = useGardenStore(s => s.activeGardenId);
   const activeGarden = useGardenStore(s =>
     s.gardens.find(g => g.gardenId === s.activeGardenId) ?? null,
+  );
+  const isOwnGarden = useGardenStore(
+    s => s.activeGardenId !== null && s.activeGardenId === s.ownGardenId,
   );
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -270,7 +282,12 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
           plants.length === 0 && styles.listContentEmpty,
         ]}
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={<EmptyState onAddPlant={navigateToAddPlant} />}
+        ListEmptyComponent={
+          <EmptyState
+            onAddPlant={navigateToAddPlant}
+            showAddButton={isOwnGarden}
+          />
+        }
         columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
         refreshControl={
           <RefreshControl
@@ -295,13 +312,15 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
         }
       />
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={navigateToAddPlant}
-        activeOpacity={0.85}>
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
+      {/* FAB — only in own garden; caretakers cannot add plants. */}
+      {isOwnGarden && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={navigateToAddPlant}
+          activeOpacity={0.85}>
+          <Text style={styles.fabIcon}>+</Text>
+        </TouchableOpacity>
+      )}
 
       <GardenPickerBottomSheet visible={pickerVisible} onClose={closePicker} />
     </View>

@@ -29,6 +29,7 @@ import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
 import {CaretakerBanner} from '../components/CaretakerBanner';
 import {GardenPickerBottomSheet} from '../components/GardenPickerBottomSheet';
+import {CareEventAvatar} from '../components/CareEventAvatar';
 import {pickImage} from '../utils/pickImage';
 import {getLastCareDateOrUndefined} from '../utils/careUtils';
 import {useAuthStore} from '../store/useAuthStore';
@@ -103,22 +104,32 @@ const StatPill: React.FC<{label: string; value: string}> = ({
 
 // ── Care History Item ──
 
-const HistoryItem: React.FC<{event: CareEvent}> = ({event}) => (
-  <View style={styles.historyItem}>
-    <Text style={styles.historyEmoji}>{careEventEmoji(event.type)}</Text>
-    <View style={styles.historyInfo}>
-      <Text style={styles.historyLabel}>{careEventLabel(event.type)}</Text>
-      <Text style={styles.historyDate}>
-        {formatEventDate(event.occurredAt || event.createdAt)}
-      </Text>
-    </View>
-    {event.source === 'vira_pot' && (
-      <View style={styles.autoBadge}>
-        <Text style={styles.autoBadgeText}>AUTO</Text>
+const HistoryItem: React.FC<{
+  event: CareEvent;
+  currentUserId: string | undefined;
+}> = ({event, currentUserId}) => {
+  const showAvatar =
+    !!event.authorId && !!currentUserId && event.authorId !== currentUserId;
+  return (
+    <View style={styles.historyItem}>
+      <Text style={styles.historyEmoji}>{careEventEmoji(event.type)}</Text>
+      <View style={styles.historyInfo}>
+        <Text style={styles.historyLabel}>{careEventLabel(event.type)}</Text>
+        <Text style={styles.historyDate}>
+          {formatEventDate(event.occurredAt || event.createdAt)}
+        </Text>
       </View>
-    )}
-  </View>
-);
+      {showAvatar && (
+        <CareEventAvatar displayName={event.authorDisplayName ?? null} />
+      )}
+      {event.source === 'vira_pot' && (
+        <View style={styles.autoBadge}>
+          <Text style={styles.autoBadgeText}>AUTO</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 // ── Pot Size Chip ──
 
@@ -165,6 +176,9 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const markFertilized = usePlantStore(s => s.markFertilized);
   const userId = useAuthStore(s => s.user?.id);
   const activeGardenId = useGardenStore(s => s.activeGardenId);
+  const isOwnGarden = useGardenStore(
+    s => s.activeGardenId !== null && s.activeGardenId === s.ownGardenId,
+  );
 
   const [pickerVisible, setPickerVisible] = useState(false);
   const openPicker = useCallback(() => setPickerVisible(true), []);
@@ -217,11 +231,12 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
     setAiOverrides(null);
   }, []);
 
-  // Header-right Edit button (hidden while editing — Save/Cancel are at bottom)
+  // Header-right Edit button. Hidden while editing (Save/Cancel are at bottom)
+  // and hidden entirely for caretakers viewing someone else's garden.
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () =>
-        isEditing ? null : (
+        isEditing || !isOwnGarden ? null : (
           <TouchableOpacity
             onPress={enterEditMode}
             hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
@@ -231,7 +246,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </TouchableOpacity>
         ),
     });
-  }, [navigation, isEditing, enterEditMode]);
+  }, [navigation, isEditing, isOwnGarden, enterEditMode]);
 
   const handleSaveNotes = useCallback(() => {
     if (plant?.id) {
@@ -503,13 +518,13 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
       updatePlant(plant.id, updates);
 
       // Reschedule watering notification if cadence changed
-      if (updates.waterFrequencyDays !== undefined) {
+      if (updates.waterFrequencyDays !== undefined && userId) {
         const updatedPlant: Plant = {
           ...plant,
           ...updates,
         };
         cancelWateringNotification(plant.id)
-          .then(() => scheduleWateringNotification(updatedPlant))
+          .then(() => scheduleWateringNotification(updatedPlant, userId))
           .catch(() => {});
       }
 
@@ -758,8 +773,8 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
         {!isEditing && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionLabel}>YOUR NOTES</Text>
-              {!isEditingNotes && (
+              <Text style={styles.sectionLabel}>NOTES</Text>
+              {isOwnGarden && !isEditingNotes && (
                 <TouchableOpacity
                   onPress={() => setIsEditingNotes(true)}
                   accessibilityRole="button"
@@ -772,7 +787,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
                 </TouchableOpacity>
               )}
             </View>
-            {isEditingNotes ? (
+            {isEditingNotes && isOwnGarden ? (
               <View style={styles.notesCard}>
                 <TextInput
                   style={styles.notesInput}
@@ -811,7 +826,11 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
                     styles.notesText,
                     !notesText && styles.notesPlaceholder,
                   ]}>
-                  {notesText || 'No notes yet. Tap "Add" to jot something down.'}
+                  {notesText
+                    ? notesText
+                    : isOwnGarden
+                      ? 'No notes yet. Tap "Add" to jot something down.'
+                      : 'No notes from the owner yet.'}
                 </Text>
               </View>
             )}
@@ -826,7 +845,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
               <View style={styles.historyCard}>
                 {recentEvents.map((event, index) => (
                   <React.Fragment key={event.id || index}>
-                    <HistoryItem event={event} />
+                    <HistoryItem event={event} currentUserId={userId} />
                     {index < recentEvents.length - 1 && (
                       <View style={styles.historyDivider} />
                     )}
@@ -884,8 +903,8 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </View>
         )}
 
-        {/* ── Remove Plant (read-only mode only) ── */}
-        {!isEditing && (
+        {/* ── Remove Plant (read-only mode + own garden only) ── */}
+        {!isEditing && isOwnGarden && (
           <View style={styles.dangerSection}>
             <TouchableOpacity
               style={styles.removeButton}
@@ -894,6 +913,25 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
               accessibilityRole="button"
               accessibilityLabel="Remove plant">
               <Text style={styles.removeButtonText}>Remove plant</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* DEV-only negative-test button — REMOVE before merging Phase 4. */}
+        {__DEV__ && !isEditing && (
+          <View style={styles.dangerSection}>
+            <TouchableOpacity
+              onPress={() => {
+                if (!plant?.id) return;
+                try {
+                  removePlant(plant.id);
+                } catch (e) {
+                  console.log('[DEBUG] force remove threw:', e);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Debug: force remove plant">
+              <Text style={styles.debugButton}>[DEBUG] Force remove</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1333,5 +1371,11 @@ const styles = StyleSheet.create({
     ...viraTheme.typography.button,
     color: viraTheme.colors.error,
     fontSize: 14,
+  },
+  debugButton: {
+    ...viraTheme.typography.caption,
+    color: viraTheme.colors.textMuted,
+    fontSize: 11,
+    paddingVertical: viraTheme.spacing.sm,
   },
 });
