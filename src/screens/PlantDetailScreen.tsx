@@ -1,5 +1,12 @@
 import type {RootStackParamList} from '../types/navigation';
-import React, {useState, useCallback, useLayoutEffect, useMemo} from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   View,
   Text,
@@ -16,9 +23,12 @@ import {
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
 import {usePlantStore} from '../store/usePlantStore';
+import {useGardenStore} from '../store/useGardenStore';
 import {CareCountdown} from '../components/CareCountdown';
 import {MarkDoneButton} from '../components/MarkDoneButton';
 import {ViraPotPlaceholder} from '../components/ViraPotPlaceholder';
+import {CaretakerBanner} from '../components/CaretakerBanner';
+import {GardenPickerBottomSheet} from '../components/GardenPickerBottomSheet';
 import {pickImage} from '../utils/pickImage';
 import {getLastCareDateOrUndefined} from '../utils/careUtils';
 import {useAuthStore} from '../store/useAuthStore';
@@ -154,6 +164,23 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
   const markWatered = usePlantStore(s => s.markWatered);
   const markFertilized = usePlantStore(s => s.markFertilized);
   const userId = useAuthStore(s => s.user?.id);
+  const activeGardenId = useGardenStore(s => s.activeGardenId);
+
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const openPicker = useCallback(() => setPickerVisible(true), []);
+  const closePicker = useCallback(() => setPickerVisible(false), []);
+
+  // Pop back to Home if the active garden changes mid-screen — the plant we
+  // were viewing is no longer in the active garden's plant list.
+  const initialActiveGardenId = useRef(activeGardenId);
+  useEffect(() => {
+    if (
+      initialActiveGardenId.current !== null &&
+      activeGardenId !== initialActiveGardenId.current
+    ) {
+      navigation.goBack();
+    }
+  }, [activeGardenId, navigation]);
 
   // ── Notes state (existing) ──
   const [notesText, setNotesText] = useState(plant?.notes || '');
@@ -567,6 +594,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
         contentContainerStyle={styles.content}
         bounces={false}
         keyboardShouldPersistTaps="handled">
+        <CaretakerBanner onPress={openPicker} />
         {/* ── Hero Photo ── */}
         <TouchableOpacity
           style={styles.heroContainer}
@@ -870,6 +898,7 @@ export const PlantDetailScreen: React.FC<Props> = ({route, navigation}) => {
           </View>
         )}
       </ScrollView>
+      <GardenPickerBottomSheet visible={pickerVisible} onClose={closePicker} />
     </KeyboardAvoidingView>
   );
 };

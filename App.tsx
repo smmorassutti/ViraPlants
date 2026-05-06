@@ -110,6 +110,19 @@ const App = () => {
     };
   }, [userId]);
 
+  // Single source of truth: activeGardenId change → reload plants.
+  useEffect(() => {
+    const unsub = useGardenStore.subscribe((state, prevState) => {
+      if (
+        state.activeGardenId !== prevState.activeGardenId &&
+        state.activeGardenId
+      ) {
+        usePlantStore.getState().loadPlants(state.activeGardenId);
+      }
+    });
+    return unsub;
+  }, []);
+
   // Request notification permission once after onboarding + auth
   useEffect(() => {
     if (hasOnboarded && isAuthenticated) {

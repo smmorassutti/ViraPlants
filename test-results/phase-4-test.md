@@ -116,7 +116,52 @@ iPhone 17 Pro simulator, after migrations apply.
 
 ## Block 2 — Picker, banner, header (Tasks 4.3–4.4)
 
-_Pending Block 1 sign-off._
+### Code changes landed in Block 2
+
+- `App.tsx` — added the activeGardenId subscription. Single source of truth: when `state.activeGardenId !== prevState.activeGardenId && state.activeGardenId`, fire `usePlantStore.loadPlants(activeGardenId)`. Plain `subscribe` with `(state, prevState)` diff — no `subscribeWithSelector` middleware needed.
+- `src/components/CaretakerBanner.tsx` — Hemlock background, Butter Moon Montserrat SemiBold copy. Returns null when `activeGardenId === ownGardenId` (own garden). Tappable; calls the `onPress` prop to open the picker. Min-height 44pt.
+- `src/components/GardenPickerBottomSheet.tsx` — RN `Modal` with `animationType="slide"` and `transparent`. Backdrop press closes (Pressable with the same `onClose`). Lists gardens; active row gets a Luxor check icon + bolded label. Refreshes `loadGardens(userId)` whenever `visible` becomes true (Q4 trigger). Min row height 56pt; Cancel button min 44pt. No new dependency.
+- `src/screens/HomeScreen.tsx` — header title is now a `TouchableOpacity` set via `useLayoutEffect` showing the active garden's display name plus chevron (▾). Reads from `useGardenStore` selectors. Banner renders directly under the header (above the FlatList). Pull-to-refresh added via `RefreshControl` calling `loadPlants(activeGardenId)`. Picker modal mounted at screen root. **FAB write-gating is Block 3.**
+- `src/screens/PlantDetailScreen.tsx` — banner renders at the top of the ScrollView (above the hero photo) so the caretaker context is unmissable. New `useEffect` watches `activeGardenId` against an `initialActiveGardenId.current` ref and calls `navigation.goBack()` on divergence (the C4 regression test). Picker modal mounted at screen root. Edit/Remove gating is Block 3.
+
+### Verifications run after code changes
+
+- ✅ `npx tsc --noEmit` — zero errors.
+- ✅ Hardcoded-hex scan on new + modified files — zero matches.
+- ✅ `any`/`@ts-ignore` scan on new + modified files — zero matches.
+- ✅ Unselectored Zustand store destructure scan (`useGardenStore()`, `useAuthStore()`, `usePlantStore()` standalone) — zero matches.
+
+### Pause Point 2 — verification checklist (for Sam)
+
+**Owner (sam.morassutti@gmail.com):**
+- [ ] Header reads "My plants" with chevron.
+- [ ] Tap header → bottom sheet slides up, lists 1 garden ("My plants" with check), backdrop tap closes, Cancel closes.
+- [ ] No caretaker banner visible.
+
+**Sign out, sign in as caretaker2 (sam.morassutti+caretaker2@gmail.com):**
+- [ ] Header reads "My plants" by default per D4.
+- [ ] Tap header → bottom sheet shows 2 gardens: "My plants" (active, checked) and "{ownerName}'s garden".
+- [ ] Tap "{ownerName}'s garden" → sheet closes, header updates, banner appears below header reading "Caring for {ownerName}'s garden", plant list updates to show owner's plants.
+- [ ] Pull-to-refresh on Home — plant list reloads against the active garden.
+- [ ] Tap banner → bottom sheet opens.
+- [ ] Switch back to "My plants" → banner disappears, plant list updates to caretaker2's own (empty) garden.
+
+**Background/foreground (NOT a force-quit):**
+- [ ] Active garden persists. Banner stays.
+
+**PlantDetailScreen pop-on-switch (C4 regression test):**
+- [ ] As caretaker2 viewing owner's garden, tap a plant → PlantDetailScreen opens.
+- [ ] Tap the banner → picker opens. Switch to "My plants."
+- [ ] PlantDetailScreen pops automatically; user lands on Home with caretaker2's own list.
+
+**Force-quit + relaunch as caretaker2 (rehydration regression test):**
+- [ ] While in owner's garden, force-quit. Wait 5 seconds. Relaunch.
+- [ ] **App reopens with owner's garden active and the banner visible.** If it falls back to "My plants," the rehydration race is back.
+
+**Edge case — owner revokes caretaker2's access during session:**
+- [ ] Caretaker2 pull-to-refresh or open the picker → `loadGardens` returns only own garden. Store falls back to `ownGardenId`. Banner disappears. No alert/toast.
+
+**Screenshot:** take one of caretaker2 viewing owner's garden with the banner — useful for Phase 6 release notes.
 
 ---
 

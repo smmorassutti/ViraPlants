@@ -6,13 +6,17 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
 import {usePlantStore} from '../store/usePlantStore';
+import {useGardenStore} from '../store/useGardenStore';
 import {PlantCard} from '../components/PlantCard';
 import {PlantGridItem} from '../components/PlantGridItem';
 import {CareCountdown, getDaysUntilCare} from '../components/CareCountdown';
+import {CaretakerBanner} from '../components/CaretakerBanner';
+import {GardenPickerBottomSheet} from '../components/GardenPickerBottomSheet';
 import type {Plant} from '../types/plant';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -132,9 +136,20 @@ const ViewToggle: React.FC<{
 
 export const HomeScreen: React.FC<Props> = ({navigation}) => {
   const plants = usePlantStore(state => state.plants);
+  const loadPlants = usePlantStore(s => s.loadPlants);
+  const activeGardenId = useGardenStore(s => s.activeGardenId);
+  const activeGarden = useGardenStore(s =>
+    s.gardens.find(g => g.gardenId === s.activeGardenId) ?? null,
+  );
+
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const upcomingTasks = useMemo(() => getUpcomingTasks(plants), [plants]);
+
+  const openPicker = useCallback(() => setPickerVisible(true), []);
+  const closePicker = useCallback(() => setPickerVisible(false), []);
 
   const navigateToPlant = useCallback(
     (plantId: string) => {
@@ -151,9 +166,41 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
     navigation.navigate('Settings');
   }, [navigation]);
 
-  // Header-right settings gear
+  const handleRefresh = useCallback(async () => {
+    if (!activeGardenId) return;
+    setRefreshing(true);
+    try {
+      await loadPlants(activeGardenId);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeGardenId, loadPlants]);
+
+  const headerLabel =
+    activeGarden && activeGarden.gardenRole === 'caretaker'
+      ? `${
+          activeGarden.gardenOwnerDisplayName?.trim() || 'A Vira gardener'
+        }'s garden`
+      : 'My plants';
+
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerTitle: () => (
+        <TouchableOpacity
+          onPress={openPicker}
+          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+          style={styles.headerTitleRow}
+          accessibilityRole="button"
+          accessibilityLabel={`${headerLabel}. Tap to switch gardens.`}>
+          <Text
+            style={styles.headerTitleText}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {headerLabel}
+          </Text>
+          <Text style={styles.headerTitleChevron}>{'\u25be'}</Text>
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={navigateToSettings}
@@ -165,7 +212,7 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, navigateToSettings]);
+  }, [navigation, navigateToSettings, openPicker, headerLabel]);
 
   // ── List Header (care tasks + toggle) ──
 
@@ -211,6 +258,7 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <View style={styles.container}>
+      <CaretakerBanner onPress={openPicker} />
       <FlatList
         data={plants}
         key={viewMode}
@@ -224,6 +272,14 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={<EmptyState onAddPlant={navigateToAddPlant} />}
         columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={viraTheme.colors.hemlock}
+            colors={[viraTheme.colors.hemlock]}
+          />
+        }
         renderItem={({item}) =>
           viewMode === 'list' ? (
             <PlantCard
@@ -246,6 +302,8 @@ export const HomeScreen: React.FC<Props> = ({navigation}) => {
         activeOpacity={0.85}>
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
+
+      <GardenPickerBottomSheet visible={pickerVisible} onClose={closePicker} />
     </View>
   );
 };
@@ -266,6 +324,24 @@ const styles = StyleSheet.create({
   headerIcon: {
     fontSize: 22,
     color: viraTheme.colors.hemlock,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingHorizontal: viraTheme.spacing.xs,
+    maxWidth: 240,
+  },
+  headerTitleText: {
+    ...viraTheme.typography.heading2,
+    color: viraTheme.colors.hemlock,
+    fontSize: 18,
+    flexShrink: 1,
+  },
+  headerTitleChevron: {
+    fontSize: 14,
+    color: viraTheme.colors.hemlock,
+    marginLeft: viraTheme.spacing.xs,
   },
   listContent: {
     paddingBottom: 100,
