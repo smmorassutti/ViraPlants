@@ -1,5 +1,5 @@
 import type { RootStackParamList } from '../types/navigation';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { viraTheme } from '../theme/vira';
 import { ViraLeafMark } from '../components/ViraLeafMark';
 import { usePlantStore } from '../store/usePlantStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { useGardenStore } from '../store/useGardenStore';
 import { pickImage } from '../utils/pickImage';
 import { uploadPlantPhoto } from '../services/photoService';
 import { analyzePlant, AnalysisError } from '../services/aiService';
@@ -95,6 +96,18 @@ export const AddPlantScreen: React.FC<Props> = ({ navigation, route }) => {
   const updatePlant = usePlantStore(s => s.updatePlant);
   const profile = usePlantStore(s => s.profile);
   const userId = useAuthStore(s => s.user?.id);
+  const isOwnGarden = useGardenStore(
+    s => s.activeGardenId !== null && s.activeGardenId === s.ownGardenId,
+  );
+
+  // Caretakers cannot add plants. Guard before paint to avoid a content flash.
+  useLayoutEffect(() => {
+    if (!isOwnGarden) {
+      navigation.goBack();
+    }
+  }, [isOwnGarden, navigation]);
+
+  if (!isOwnGarden) return null;
 
   // ─── State ───
   const [step, setStep] = useState(1);

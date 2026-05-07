@@ -22,7 +22,12 @@ Format:
 
 ## Open questions
 
-_None. See Resolved questions below._
+### Q3: `src/store/` vs `src/stores/` — plan and CLAUDE.md disagree
+
+- **Phase:** 4 (block 1 / 4.1)
+- **What I observed:** The Phase 4 v3.0 plan and the Claude Code session prompt both reference `src/stores/useGardenStore.ts`, but the existing convention (per CLAUDE.md project structure section and `ls src/`) is `src/store/` (singular — `usePlantStore.ts`, `useAuthStore.ts`, `useBleStore.ts`).
+- **Claude Code's best-guess resolution:** Created `src/store/useGardenStore.ts` (singular, matching existing convention). The prompt explicitly says "If anything in this prompt conflicts with CLAUDE.md or the v3.0 plan, the plan wins" — but the CLAUDE.md project structure is itself the authority on directory layout. Going with the existing convention is the lower-risk choice; renaming the directory is a separate housekeeping decision.
+- **Sam's answer:** _pending_
 
 ---
 

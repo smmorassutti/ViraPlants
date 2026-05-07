@@ -15,6 +15,8 @@ import {InviteCaretakerScreen} from './src/screens/InviteCaretakerScreen';
 import {viraTheme} from './src/theme/vira';
 import {usePlantStore} from './src/store/usePlantStore';
 import {useAuthStore} from './src/store/useAuthStore';
+import {useGardenStore} from './src/store/useGardenStore';
+import {Toast} from './src/components/Toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getSession, onAuthStateChange, configureGoogleSignIn} from './src/services/auth';
 import {requestPermission} from './src/services/notificationService';
@@ -38,10 +40,10 @@ const App = () => {
   const hasOnboarded = usePlantStore(s => s.hasOnboarded);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const isLoading = useAuthStore(s => s.isLoading);
+  const userId = useAuthStore(s => s.user?.id);
   const setSession = useAuthStore(s => s.setSession);
   const setLoading = useAuthStore(s => s.setLoading);
 
-  const loadPlants = usePlantStore(s => s.loadPlants);
   const setHasOnboarded = usePlantStore(s => s.setHasOnboarded);
 
   useEffect(() => {
@@ -57,27 +59,70 @@ const App = () => {
     getSession().then(session => {
       setSession(session);
       setLoading(false);
-      if (session) loadPlants();
     }).catch(() => {
       setLoading(false);
     });
 
     // Listen for auth state changes
-    const setPlants = usePlantStore.getState().setPlants;
     const subscription = onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) {
-        loadPlants();
-      } else {
-        // Clear plant data on sign-out to prevent data leaking between users
-        setPlants([]);
+      if (!session) {
+        // Prevent cross-account data leak on shared device.
+        usePlantStore.getState().setPlants([]);
+        useGardenStore.getState().clearOnSignOut();
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [setSession, setLoading, loadPlants, setHasOnboarded]);
+  }, [setSession, setLoading, setHasOnboarded]);
+
+  // Await persisted activeGardenId rehydration before loadGardens to avoid
+  // silently overwriting it (cold-launch race; see plan §4.1).
+  useEffect(() => {
+    if (!userId) return;
+
+    let cancelled = false;
+
+    const init = async () => {
+      if (!useGardenStore.persist.hasHydrated()) {
+        await new Promise<void>(resolve => {
+          const unsub = useGardenStore.persist.onFinishHydration(() => {
+            unsub();
+            resolve();
+          });
+        });
+      }
+      if (cancelled) return;
+
+      await useGardenStore.getState().loadGardens(userId);
+      if (cancelled) return;
+
+      const activeId = useGardenStore.getState().activeGardenId;
+      if (activeId) {
+        await usePlantStore.getState().loadPlants(activeId);
+      }
+    };
+
+    init();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // Single source of truth: activeGardenId change → reload plants.
+  useEffect(() => {
+    const unsub = useGardenStore.subscribe((state, prevState) => {
+      if (
+        state.activeGardenId !== prevState.activeGardenId &&
+        state.activeGardenId
+      ) {
+        usePlantStore.getState().loadPlants(state.activeGardenId);
+      }
+    });
+    return unsub;
+  }, []);
 
   // Request notification permission once after onboarding + auth
   useEffect(() => {
@@ -164,6 +209,7 @@ const App = () => {
           )}
         </Stack.Navigator>
       </NavigationContainer>
+      <Toast />
     </>
   );
 };

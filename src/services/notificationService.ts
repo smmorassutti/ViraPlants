@@ -21,7 +21,11 @@ export async function requestPermission(): Promise<boolean> {
 
 export async function scheduleWateringNotification(
   plant: Plant,
+  currentUserId: string,
 ): Promise<void> {
+  // Caretakers don't live with the owner's plants — skip the local
+  // notification when this isn't our own plant.
+  if (plant.userId && plant.userId !== currentUserId) return;
   if (plant.waterFrequencyDays === undefined) return;
 
   await ensureChannel();

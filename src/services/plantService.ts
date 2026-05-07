@@ -26,11 +26,12 @@ type PlantRow = {
 type CareEventRow = {
   id: string;
   plant_id: string;
-  user_id: string;
+  author_id: string;
   type: string;
   source: string;
   notes: string | null;
   created_at: string;
+  author?: {display_name: string | null} | null;
 };
 
 const rowToPlant = (row: PlantRow, careEvents: CareEvent[] = []): Plant => ({
@@ -58,7 +59,8 @@ const rowToPlant = (row: PlantRow, careEvents: CareEvent[] = []): Plant => ({
 const rowToCareEvent = (row: CareEventRow): CareEvent => ({
   id: row.id,
   plantId: row.plant_id,
-  userId: row.user_id,
+  authorId: row.author_id,
+  authorDisplayName: row.author?.display_name ?? null,
   type: row.type as CareEvent['type'],
   source: row.source as CareEvent['source'],
   notes: row.notes ?? undefined,
@@ -67,36 +69,31 @@ const rowToCareEvent = (row: CareEventRow): CareEvent => ({
 
 // ── CRUD ──
 
-export const fetchPlants = async (userId: string): Promise<Plant[]> => {
+type PlantWithEventsRow = PlantRow & {
+  care_events?: CareEventRow[] | null;
+};
+
+export const fetchPlants = async (gardenId: string): Promise<Plant[]> => {
+  // PostgREST embed via FK care_events.author_id → profiles.id (migration 005).
   const {data: plantRows, error: plantError} = await supabase
     .from('plants')
-    .select('*')
-    .eq('user_id', userId)
+    .select('*, care_events(*, author:profiles(display_name))')
+    .eq('user_id', gardenId)
     .order('created_at', {ascending: false});
 
   if (plantError) throw plantError;
   if (!plantRows || plantRows.length === 0) return [];
 
-  const plantIds = plantRows.map(p => p.id);
-
-  const {data: eventRows, error: eventError} = await supabase
-    .from('care_events')
-    .select('*')
-    .in('plant_id', plantIds)
-    .order('created_at', {ascending: false});
-
-  if (eventError) throw eventError;
-
-  const eventsByPlant = new Map<string, CareEvent[]>();
-  for (const row of eventRows || []) {
-    const events = eventsByPlant.get(row.plant_id) || [];
-    events.push(rowToCareEvent(row));
-    eventsByPlant.set(row.plant_id, events);
-  }
-
-  return plantRows.map(row =>
-    rowToPlant(row, eventsByPlant.get(row.id) || []),
-  );
+  return (plantRows as PlantWithEventsRow[]).map(row => {
+    const events = (row.care_events ?? [])
+      .map(rowToCareEvent)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      );
+    return rowToPlant(row, events);
+  });
 };
 
 export const createPlant = async (
@@ -166,7 +163,7 @@ export const addCareEvent = async (
     .from('care_events')
     .insert({
       plant_id: plantId,
-      user_id: userId,
+      author_id: userId,
       type,
       source,
     })

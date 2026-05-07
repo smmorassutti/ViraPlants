@@ -14,6 +14,7 @@ import {
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {viraTheme} from '../theme/vira';
 import {useAuthStore} from '../store/useAuthStore';
+import {useGardenStore} from '../store/useGardenStore';
 import {signOut, getProfile, updateProfile} from '../services/auth';
 import {ViraLeafMark} from '../components/ViraLeafMark';
 import {PendingInviteCard} from '../components/PendingInviteCard';
@@ -101,9 +102,13 @@ export const SettingsScreen: React.FC<Props> = ({navigation}) => {
     async (inviteId: string) => {
       await acceptInvite(inviteId);
       setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
-      // TODO(phase-4): trigger useGardenStore.loadGardens() refresh; in phase 4
-      // the accepted garden becomes visible in the home header garden list,
-      // which is the durable confirmation surface.
+      // Refresh the garden list so the newly-accepted garden shows up in the
+      // home-header picker on next visit. The home picker is the durable
+      // confirmation surface for accept; no toast is shown here.
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (currentUserId) {
+        useGardenStore.getState().loadGardens(currentUserId).catch(() => {});
+      }
     },
     [],
   );

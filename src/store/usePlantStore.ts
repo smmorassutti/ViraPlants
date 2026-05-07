@@ -7,6 +7,13 @@ import {
   cancelWateringNotification,
 } from '../services/notificationService';
 import {useAuthStore} from './useAuthStore';
+import {showErrorToast} from '../utils/showErrorToast';
+
+const FORBIDDEN_TOAST = 'Something went wrong. Please try again.';
+const isForbidden = (err: unknown): boolean =>
+  typeof err === 'object' &&
+  err !== null &&
+  (err as {code?: unknown}).code === '42501';
 
 type PlantStoreState = {
   plants: Plant[];
@@ -21,7 +28,7 @@ type PlantStoreActions = {
 
   // Plants
   setPlants: (plants: Plant[]) => void;
-  loadPlants: () => Promise<void>;
+  loadPlants: (gardenId: string) => Promise<void>;
   addPlant: (plant: PlantInput) => Promise<Plant>;
   updatePlant: (id: string, updates: Partial<Plant>) => void;
   removePlant: (id: string) => void;
@@ -62,16 +69,12 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
   // ── Plants ──
   setPlants: (plants) => set({plants}),
 
-  loadPlants: async () => {
-    const userId = getUserId();
-    if (!userId) return;
+  loadPlants: async (gardenId) => {
+    if (!gardenId) return;
     try {
-      const remotePlants = await plantService.fetchPlants(userId);
-      // Merge: keep optimistic temp plants that haven't synced yet
-      set((state) => {
-        const tempPlants = state.plants.filter((p) => p.id.startsWith('temp-'));
-        return {plants: [...remotePlants, ...tempPlants]};
-      });
+      const remotePlants = await plantService.fetchPlants(gardenId);
+      // Full replace: switching gardens drops the previous garden's plants.
+      set({plants: remotePlants});
     } catch (error) {
       console.warn('Failed to load plants:', error);
     }
@@ -103,9 +106,13 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
           p.id === tempPlant.id ? remotePlant : p,
         ),
       }));
-      scheduleWateringNotification(remotePlant).catch(() => {});
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (currentUserId) {
+        scheduleWateringNotification(remotePlant, currentUserId).catch(() => {});
+      }
       return remotePlant;
     } catch (error) {
+      if (isForbidden(error)) showErrorToast(FORBIDDEN_TOAST);
       console.warn('Failed to sync plant to Supabase:', error);
       return tempPlant;
     }
@@ -126,6 +133,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
 
     // Sync to Supabase with rollback on failure
     plantService.updatePlantRemote(id, updates).catch((error) => {
+      if (isForbidden(error)) showErrorToast(FORBIDDEN_TOAST);
       console.warn('Failed to sync plant update to Supabase:', error);
       set({plants: prev});
     });
@@ -143,6 +151,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
 
     // Sync to Supabase
     plantService.deletePlant(id).catch((error) => {
+      if (isForbidden(error)) showErrorToast(FORBIDDEN_TOAST);
       console.warn('Failed to sync plant deletion to Supabase:', error);
       // Rollback on failure
       set({plants: prev});
@@ -164,6 +173,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
       ...event,
       id: event.id || generateTempId(),
       plantId,
+      authorId: userId ?? undefined,
       occurredAt: now,
       source: event.source || 'manual',
       createdAt: now,
@@ -207,8 +217,10 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
     const {logCareEvent} = get();
     logCareEvent(plantId, {type: 'water'});
 
+    // Capture currentUserId BEFORE async work — auth state can change.
+    const currentUserId = useAuthStore.getState().user?.id;
     const plant = get().plants.find((p) => p.id === plantId);
-    if (plant) {
+    if (plant && currentUserId) {
       const now = new Date().toISOString();
       const updatedPlant = {
         ...plant,
@@ -218,7 +230,7 @@ export const usePlantStore = create<PlantStore>((set, get) => ({
         ],
       };
       cancelWateringNotification(plantId)
-        .then(() => scheduleWateringNotification(updatedPlant))
+        .then(() => scheduleWateringNotification(updatedPlant, currentUserId))
         .catch(() => {});
     }
   },
