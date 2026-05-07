@@ -180,7 +180,7 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 **In progress:**
 - **Notifee on physical device:** Degradation wrapper removed, direct static import in place, simulator confirmed working. Physical device confirmation still pending Metro fix on Ninja Sam.
 - **Metro on Ninja Sam:** Info.plist fix applied (`NSLocalNetworkUsageDescription` + `NSBonjourServices` with `_http._tcp`). Rebuild done. Physical device test still pending — check Settings → Privacy & Security → Local Network for ViraPlantsMobileApp after next launch.
-
+- **Cold-launch empty-state flash:** "Your garden awaits" briefly appears before stores hydrate, even when plants exist. Phase 4 fixed the rehydration *mechanism* (persisted activeGardenId is now correctly restored — see Deployment Learnings "Zustand persist rehydration awaiting"), but HomeScreen still renders before hydration completes, so the empty-state copy flashes briefly before the real state loads. Distinct from the hydration race itself. Fix: gate App.tsx render on `useGardenStore.persist.hasHydrated()` returning true; show a Butter Moon screen during hydration. ~10 lines. Deferred to agentic team workflow.
 **Pending setup (manual steps for Sam):**
 1. Apple Sign-In (pre-submission only): Enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple. Add "Sign In with Apple" capability in Xcode → Signing & Capabilities. Create Apple Services ID + secret key in Apple Developer portal. Re-wire UI + `appleSignIn()` in auth.ts.
 2. Confirm Metro + Notifee on Ninja Sam physical device after rebuild.
