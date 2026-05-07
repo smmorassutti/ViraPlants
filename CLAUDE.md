@@ -1,6 +1,57 @@
 # Vira Plants Mobile App
 
-Self-watering plant system companion app. Phase 1 = free plant companion (distribution play). Phase 2 = Vira pot controller via BLE. Every decision must serve both phases.
+Self-watering plant system companion app. 
+Phase 1 = free plant companion (distribution play). 
+V1 Launch Posture (locked May 5, 2026)
+
+V1 ships within 6 weeks of the May 5 planning call — target submission June 16, launch window June 16–22. Definition of done: complete plant care loop + functional Caretaker Mode Phases 1–5, polished, tested, on the App Store. Tight scope, ruthless prioritization. Anything outside the V1 Scope list below is V1.1 or later.
+
+V1 Scope (in)
+- Phase 1–5 Caretaker Mode (Phase 5 = caretaker notes, in progress). Phase 6 = TestFlight build with full caretaker loop on real devices.
+- Manual watering schedule override per plant. (Manual fertilizer override TBD — see Open V1 Decisions.)
+- Plant ID accuracy: integrate at least one free indoor-plant database to supplement species_cache before falling back to Claude Vision.
+- "Your garden awaits" cold-launch flash fix.
+- Notification reliability audit + explicit Caretaker Mode notification policy.
+- Vira Pot teaser: emoji → ViraLeafMark.
+- RN performance pass (New Arch confirmation, re-render audit, list/image perf).
+- Header chevron polish (Unicode ▾ → lucide ChevronDown).
+- Apple Sign-In re-wire (App Store policy hard requirement).
+- Info.plist: remove or fill NSLocationWhenInUseUsageDescription (currently empty — Apple will reject).
+- Privacy policy + terms hosted at viraplants.com.
+- App Store listing assets (screenshots, description, App Privacy questionnaire).
+- Supabase usage audit + documented upgrade triggers (default: stay on free; flip to Pro only if Storage trends past 70% of 1 GB, real backup-needed scenario surfaces, or 1-day log retention blocks a debugging session).
+
+V1 Scope (out — explicitly deferred)
+- Phase 2 BLE / Vira Pot integration. BLE scaffold stays as-is, unwired. Revisit ~6 months post-launch.
+- Flutter migration. Re-evaluate post-V1 with real-user perf data, not before. (Decision rationale: planning call handoff, May 5.)
+- Plant sharing or extended caretaker mode beyond Phases 1–5.
+- Owner-side owner_seen_at acceptance signal (parked indefinitely).
+- Real-time subscriptions on garden_caretakers.
+- Per-action 42501 error copy (generic toast is intentional).
+- Push notifications to owner when caretaker logs care.
+- Android Play Store release. Codebase still supports Android; we just don't ship it in V1. Real keystore, Notifee Android config, Android Google Sign-In OAuth client, Play Store listing, Android-device testing all deferred to V1.1+.
+
+Open V1 Decisions (resolve in week 1 — May 7–13)
+- D1: Caretaker Mode notification policy. Owner only? Caretaker only? Both with different copy?
+- D2: Free indoor-plant database choice. License + indoor coverage + watering data quality.
+- D3: Manual fertilizer override in same V1 release as watering, or defer to V1.1?
+- D4: Supabase free-tier audit. Default: stay on free for V1 (unless Storage approaches 1 GB / backup-needed moment surfaces / log-retention blocks debugging). Pro is operational maturity, not scaling.
+- D5: iOS-only V1 (locked, recommended). Android deferred to V1.1+. Confirm no core stakeholder is Android-only for beta testing.
+
+V1 Critical-path workstreams (in rough sequence)
+1. Caretaker Mode Phase 5 (notes) — schema already in migration 003; reuse getInitials + CareEventAvatar pattern.
+2. Manual watering schedule override per plant.
+3. Plant ID accuracy: free-DB integration in analyze-plant Edge Function before Vision fallback.
+4. RN perf pass + cold-launch flash fix.
+5. Apple Sign-In re-wire.
+6. Phase 6 TestFlight build (CFBundleVersion 6) with full caretaker loop verified on two real devices.
+7. Pre-submission cleanup (Info.plist, privacy policy, App Store listing).
+8. Beta + bug bash + RC build (build 7) — code freeze June 9.
+9. Submit June 11–12, target launch June 16–22.
+
+See Vira_V1_Execution_Plan.md (May 7) for the full week-by-week schedule, decision rationales, and risk register.
+
+Phase 2 = Vira pot controller via BLE. Every decision must serve both phases.
 
 ## Tech Stack
 
@@ -180,20 +231,43 @@ Key fields on every Plant record: `id`, `nickname`, `name` (species from Claude)
 **In progress:**
 - **Notifee on physical device:** Degradation wrapper removed, direct static import in place, simulator confirmed working. Physical device confirmation still pending Metro fix on Ninja Sam.
 - **Metro on Ninja Sam:** Info.plist fix applied (`NSLocalNetworkUsageDescription` + `NSBonjourServices` with `_http._tcp`). Rebuild done. Physical device test still pending — check Settings → Privacy & Security → Local Network for ViraPlantsMobileApp after next launch.
-- **Cold-launch empty-state flash:** "Your garden awaits" briefly appears before stores hydrate, even when plants exist. Phase 4 fixed the rehydration *mechanism* (persisted activeGardenId is now correctly restored — see Deployment Learnings "Zustand persist rehydration awaiting"), but HomeScreen still renders before hydration completes, so the empty-state copy flashes briefly before the real state loads. Distinct from the hydration race itself. Fix: gate App.tsx render on `useGardenStore.persist.hasHydrated()` returning true; show a Butter Moon screen during hydration. ~10 lines. Deferred to agentic team workflow.
+- **Cold-launch empty-state flash:** "Your garden awaits" briefly appears before stores hydrate, even when plants exist. Phase 4 fixed the rehydration *mechanism* (persisted activeGardenId is now correctly restored — see Deployment Learnings "Zustand persist rehydration awaiting"), but HomeScreen still renders before hydration completes, so the empty-state copy flashes briefly before the real state loads. Distinct from the hydration race itself. Fix: gate App.tsx render on `useGardenStore.persist.hasHydrated()` returning true; show a Butter Moon screen during hydration. ~10 lines. Documented in commit 680a16c (May 6, post-Phase-4). Targeted for week 1 of the V1 plan.
 **Pending setup (manual steps for Sam):**
 1. Apple Sign-In (pre-submission only): Enable Apple provider in Supabase Dashboard → Authentication → Providers → Apple. Add "Sign In with Apple" capability in Xcode → Signing & Capabilities. Create Apple Services ID + secret key in Apple Developer portal. Re-wire UI + `appleSignIn()` in auth.ts.
 2. Confirm Metro + Notifee on Ninja Sam physical device after rebuild.
 
 **Next up (in order):**
-1. Caretaker mode Phase 5 — caretaker notes. New `caretakerNotesService.ts` (listNotes/addNote/deleteNote), Caretaker Notes section on PlantDetailScreen with avatar + author + relative timestamp and RLS author-only delete. Reuse Phase 4's `getInitials` util + the avatar pattern from `CareEventAvatar`.
-2. Caretaker mode Phase 6 — TestFlight build 6 ships caretaker mode. Follow Apr 16 checklist (bump to 6, clean archive to `/tmp/ViraPlantsTemp6.xcarchive`, upload, e2e test with a second Apple ID).
-3. **Owner-facing acceptance signal (`owner_seen_at`)** — parked from Phase 3, kept parked through Phase 4. `ManageCaretakersScreen` already shows accepted caretakers, so the value is marginal. Implement only if a real user request surfaces.
-4. Confirm Metro + Notifee on Ninja Sam physical device.
-5. Confirm Notifee on physical device via TestFlight.
-6. BLE permissions + Phase 2 (Vira pot) wiring.
-7. Pre-submission: re-wire Apple Sign-In.
-8. **Post-Phase-6 cleanup:** replace owner-side `listMyInvites` / `cancelInvite` with direct PostgREST calls now that migration 003b patched the `garden_invites` RLS policies. Delete `supabase/functions/caretaker-invites/` once nothing invokes it. See the Caretaker Mode Integration Pattern section for context.
+Next up (in order, V1-aligned):
+
+V1 critical path
+1. Resolve D1–D5 (see V1 Launch Posture). Targets week 1.
+2. Quick polish PR (single session): Vira logo in Pot teaser, lucide ChevronDown for header, migration 004 idempotency (DROP FUNCTION IF EXISTS), CLAUDE.md housekeeping (stale owner_email line, test-results/phase-3-test.md update, self-invite row cleanup), generate_handoff_phase4.py decision (parameterize → generate_handoff.py or delete).
+3. Cold-launch flash fix — gate App.tsx render on useGardenStore.persist.hasHydrated() && !useAuthStore.isLoading. Show splash (Hemlock bg + ViraLeafMark) until both resolve. ~10–20 lines.
+4. Notification reliability audit + D1 implementation. Verify Notifee schedules + fires correctly across foreground/background/killed states. Confirm or fix on physical device (Ninja Sam).
+5. Caretaker Mode Phase 5 — caretaker notes. New caretakerNotesService.ts (listNotes/addNote/deleteNote), Caretaker Notes section on PlantDetailScreen with avatar + author + relative timestamp and RLS author-only delete. Reuse getInitials util + the avatar pattern from CareEventAvatar. Stress-test the CE plan before kicking off Claude Code (Phase 4 caught 4 critical + 6 high issues this way).
+6. Manual watering schedule override (per plant). Surface waterFrequencyDays as directly editable on PlantDetailScreen edit mode. Notification reschedule already wired — verify, don't rebuild. Apply D3 decision re: fertilizer.
+7. Plant ID accuracy — integrate the chosen free DB (D2) into analyze-plant Edge Function. Order: species_cache → free DB → Claude Vision → cache result. Calibrate confidence language in UI based on data source.
+8. RN performance pass — confirm New Architecture, React DevTools re-render audit, image caching, FlatList review, Hermes config.
+9. Apple Sign-In re-wire (Pre-submission only — App Store policy requires it if any third-party OAuth is offered). Re-add appleSignIn() in src/services/auth.ts, restore AppleButton on LoginScreen + SignUpScreen, enable "Sign In with Apple" capability in Xcode → Signing & Capabilities, enable Apple provider in Supabase Dashboard, create Apple Services ID + secret key in Apple Developer portal.
+10. Info.plist cleanup — remove or fill NSLocationWhenInUseUsageDescription.
+11. Privacy policy + terms hosted at viraplants.com (coordinate with Rory).
+12. Caretaker Mode Phase 6 TestFlight — bump CFBundleVersion to 6, clean archive to /tmp/ViraPlantsTemp6.xcarchive, upload, end-to-end test with second Apple ID for full owner ↔ caretaker loop on real devices. Confirm Notifee on physical device.
+13. App Store listing — screenshots, description, keywords, support URL, marketing URL, App Privacy questionnaire.
+14. Supabase plan upgrade per D4.
+15. Beta with 5–10 internal testers. Bug bash. P0/P1 fixes. Code freeze June 9.
+16. RC build 7 to TestFlight by June 10. Submit for review June 11–12. Launch June 16–22.
+
+Post-V1 (V1.1 candidates)
+- Owner-facing acceptance signal (owner_seen_at) — only if real user request surfaces.
+- Manual fertilizer override (if not in V1 per D3).
+- Owner-side caretaker-invites Edge Function cleanup — replace listMyInvites / cancelInvite with direct PostgREST calls now that migration 003b patched RLS policies. Delete supabase/functions/caretaker-invites/.
+- Push notification to owner when caretaker logs care.
+- Real-time subscriptions on garden_caretakers.
+- Android V1.1 — replace debug keystore with real signing key.
+
+Phase 2 (~6 months post-launch)
+- BLE permissions + Vira Pot wiring. Existing scaffold (src/types/ble.ts, src/services/bleService.ts, src/store/useBleStore.ts) is the starting point.
+- Flutter re-evaluation — only if real-user RN perf data justifies a spike. Per planning call rationale (May 5), the perceived sluggishness is more likely fixable in RN than a Flutter rewrite.
 
 ## Implementation Notes
 
@@ -284,6 +358,27 @@ Edge Function secrets (set via `supabase secrets set`): `ANTHROPIC_API_KEY`, `SE
 
 Edge Function secrets in play for caretaker mode: `RESEND_API_KEY`, `SERVICE_ROLE_KEY`.
 
+V1 Plant ID Accuracy Pattern (planned, not yet implemented)
+
+The current analyze-plant Edge Function flow is: species_cache lookup (if userSpeciesGuess given) → Claude Vision call → cache result. The V1 accuracy improvement adds one layer between cache and Vision: a free indoor-plant database query.
+
+Planned flow (post-D2 resolution):
+1. Cache hit on species_cache → return cached.
+2. Cache miss → query the chosen free DB (one of: USDA Plants, GBIF, OpenFarm, iNaturalist, etc.).
+3. Free DB hit with sufficient confidence → use it; cache the result.
+4. Free DB miss or low confidence → call Claude Vision (existing flow); cache the result.
+
+Constraints:
+- License must permit redistribution (we're caching the result and serving it to users).
+- Indoor / houseplant coverage is the priority — most general plant DBs are weak here.
+- The DB query is server-side in the Edge Function, NOT a new client dependency.
+- Watering frequency specifically must be present or derivable — many DBs have light/temp but not water days, which is what we actually need.
+- Latency budget per Vision call is currently ~3–6 seconds; the free DB query should be sub-second so it doesn't degrade the perceived performance of the AI flow.
+
+UI implication: confidence language in AddPlantScreen / Re-identify results may differ when the source is free DB vs Vision. Calm-and-capable voice stays the same; avoid false certainty when the data is uncertain. Don't expose the source type explicitly to the user.
+
+Decision (D2) tracked in Vira_V1_Execution_Plan.md week-1 deliverables.
+
 ## Deployment Learnings (Mar 2026)
 
 - **"Verify JWT with legacy secret" must be OFF** — Supabase Edge Function setting in Dashboard → Edge Functions → Settings. Must be disabled for functions receiving user JWTs, otherwise auth will silently fail.
@@ -311,9 +406,19 @@ Edge Function secrets in play for caretaker mode: `RESEND_API_KEY`, `SERVICE_ROL
 
 ## Pre-Launch Checklist
 
-1. **Android release build is signed with debug keystore** — must replace with a real signing key before any release build.
-2. **`NSLocationWhenInUseUsageDescription` is empty in Info.plist** — Apple will reject the app. Either add a real usage string or remove the key if location isn't needed.
-3. **Apple Developer enrollment approved** — Individual account, Team ID `Z3M79BTP5M`. Active Xcode project is at `ios/ViraPlantsTemp.xcodeproj` (the `ios/` root — not the `ios/ViraPlantsTemp/` subdirectory copy).
+Pre-Launch Checklist
+- Apple Sign-In re-wired and tested end-to-end. Required by App Store policy when any third-party OAuth is offered. Status: deferred from Apr 10, 2026; package still installed.
+- NSLocationWhenInUseUsageDescription is currently empty in Info.plist — Apple will reject the app. Either remove the key (default — location not used) or add a real usage string.
+- Android release build is signed with debug keystore. Decision (D5, locked): iOS-only V1; Android deferred to V1.1+. Codebase still supports Android — we just don't ship to Play Store. Real keystore, Notifee Android config, Android Google Sign-In OAuth client, Play Store listing, and Android-device testing all become V1.1+ work.
+- Apple Developer enrollment approved — Individual account, Team ID Z3M79BTP5M. Active Xcode project is at ios/ViraPlantsTemp.xcodeproj (the ios/ root — not the ios/ViraPlantsTemp/ subdirectory copy).
+- Privacy policy hosted at viraplants.com/privacy (Rory owns the domain — coordinate).
+- Terms of service hosted at viraplants.com/terms.
+- Supabase plan decision (D4): default stay on free for V1. Document current usage numbers (DB size, Storage, bandwidth, function invocations, MAU) and the upgrade triggers (Storage > 70% of 1 GB / first backup-needed moment / first log-retention block / first paid users) here when the audit completes. Pre-launch mitigations on free: manual pg_dump before each migration; weekly Storage bucket inventory export.
+- App Store listing complete: screenshots (6.5" iPhone primary), description, keywords, support URL, marketing URL, App Privacy questionnaire (photos, email, name, plant data, no tracking IDs).
+- Phase 6 TestFlight build verified end-to-end on at least 2 real devices with 2 Apple IDs.
+- Notifee verified on physical device (Ninja Sam) — long-pending item.
+- All P0 / P1 bugs from beta closed.
+- Code freeze: June 9 EOD. RC build 7 uploaded by June 10.
 
 ## Hardware Context (for Phase 2 awareness)
 
